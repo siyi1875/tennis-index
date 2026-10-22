@@ -183,4 +183,88 @@ contract TennisIndexTest is Test {
         vm.expectRevert();
         tok.initialize("X", address(this), 0, 0);
     }
+
+    // ------------------------------ treasury ------------------------------
+
+    function _tradeRoundTrip() internal returns (PlayerToken tok) {
+        tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        vm.prank(user);
+        uint256 out = tok.buy{value: 10 ether}(user, 0); // fee 0.1
+        vm.prank(user);
+        tok.sell(out, user, 0); // fee 0.099
+    }
+
+    function test_feesSplitFiftyFiftyBetweenTreasuryAndPool() public {
+        _tradeRoundTrip();
+        assertEq(core.treasuryBalance(), 0.0995 ether); // 50% of 0.199
+        assertEq(core.poolBalance(), 0.0995 ether);
+        assertEq(address(core).balance, 0.199 ether);
+    }
+
+    function test_topUpAndSweepsGoToPoolOnly() public {
+        core.topUp{value: 5 ether}();
+        assertEq(core.treasuryBalance(), 0);
+        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        vm.prank(user);
+        tok.buy{value: 10 ether}(user, 0); // 0.1 fee -> 0.05 treasury
+        vm.prank(admin);
+        core.calibrateLevel(0, 600_000); // level falls: reserve surplus swept back
+        assertEq(core.treasuryBalance(), 0.05 ether);
+        assertGt(core.poolBalance(), 5.05 ether);
+    }
+
+    /// Treasury revenue is never spent on level rises, even when the pool is dry.
+    function test_treasuryNeverFundsLevelRises() public {
+        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        vm.prank(user);
+        tok.buy{value: 10 ether}(user, 0); // pool 0.05, treasury 0.05
+        vm.prank(admin);
+        core.calibrateLevel(0, 900_000); // needs ~1.98, pool has 0.05
+        assertEq(core.poolBalance(), 0);
+        assertEq(core.treasuryBalance(), 0.05 ether);
+        assertEq(address(core).balance, 0.05 ether);
+    }
+
+    function test_withdrawTreasuryPaysTreasuryAddress() public {
+        _tradeRoundTrip();
+        address payout = makeAddr("payout");
+        vm.prank(admin);
+        core.setTreasury(payout, 5_000);
+        vm.prank(admin);
+        core.withdrawTreasury(0.0995 ether);
+        assertEq(payout.balance, 0.0995 ether);
+        assertEq(core.treasuryBalance(), 0);
+        assertEq(core.poolBalance(), 0.0995 ether); // pool untouched
+    }
+
+    function test_withdrawTreasuryWorksWhilePaused() public {
+        _tradeRoundTrip();
+        vm.prank(admin);
+        core.pause();
+        vm.prank(admin);
+        core.withdrawTreasury(0.0995 ether);
+        assertEq(admin.balance, 0.0995 ether); // treasury defaults to admin
+    }
+
+    function test_withdrawTreasuryCannotTouchPool() public {
+        _tradeRoundTrip();
+        core.topUp{value: 5 ether}();
+        vm.prank(admin);
+        vm.expectRevert();
+        core.withdrawTreasury(0.0995 ether + 1);
+    }
+
+    function test_treasuryAdminOnlyAndShareCapped() public {
+        _tradeRoundTrip();
+        vm.expectRevert();
+        core.withdrawTreasury(1);
+        vm.expectRevert();
+        core.setTreasury(user, 5_000);
+        vm.prank(admin);
+        vm.expectRevert();
+        core.setTreasury(user, 8_001); // pool keeps at least 20%
+        vm.prank(admin);
+        vm.expectRevert();
+        core.setTreasury(address(0), 5_000);
+    }
 }

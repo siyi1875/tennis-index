@@ -34,8 +34,8 @@ contract PlayerTokenInvariants is Test {
     }
 
     function _topUpIfLow() internal {
-        if (address(core).balance < 100 ether) {
-            vm.deal(address(core), 1_000_000 ether);
+        if (core.poolBalance() < 100 ether) {
+            core.topUp{value: 1_000_000 ether}(); // keeps treasury accounting intact
         }
     }
 
@@ -131,6 +131,13 @@ contract PlayerTokenInvariants is Test {
     }
 
     /// Level bookkeeping consistency between core and token.
+    /// Accrued treasury revenue is always fully held by the core, so a
+    /// withdrawal can never dip into the pool (poolBalance never underflows).
+    function invariant_treasuryFullyBacked() public view {
+        assertGe(address(core).balance, core.treasuryBalance());
+        assertEq(core.poolBalance() + core.treasuryBalance(), address(core).balance);
+    }
+
     function invariant_tokenLevelMatchesCore() public view {
         assertEq(core.tokenLevel(address(tok)), core.levelOf(seedId));
         assertGe(core.levelOf(seedId), core.MIN_LEVEL());

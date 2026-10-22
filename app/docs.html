@@ -345,7 +345,8 @@ reserve target = supply × NAV</div>
         <tr><td>Calibration</td><td>Admin-only one-off set of a token's level to computed truth, bypassing the push cap (used at registration).</td></tr>
         <tr><td>Official Daily Close</td><td>Frozen 09:00 UTC settlement levels, sha256-hashed.</td></tr>
         <tr><td>Funded ratio</td><td>Σ actual reserves ÷ Σ required reserves across supplied tokens.</td></tr>
-        <tr><td>Core reserve</td><td>The core's CHZ clearing balance, fed by trading fees; sweeps at season end.</td></tr>
+        <tr><td>Core reserve</td><td>The core's CHZ pool that funds level rises, fed by half of every trading fee and by sweeps when levels fall.</td></tr>
+        <tr><td>Treasury</td><td>The other half of every trading fee: venue revenue, held separately and never used to fund level rises.</td></tr>
       </tbody>
     </table>
   </main>

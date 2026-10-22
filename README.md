@@ -98,8 +98,8 @@ rounds; a 4th-deep round maps to R128 vs R96 by match count (≥40 → 128-draw)
   `supply × 100 CHZ × newLevel / 750000` (capped at its balance — graceful degradation if the pool
   is short, NAV floats below target but stays fully backed); on a fall the token sweeps
   the surplus back to the core.
-- Trading fees accrue to the core pool. The pool is seeded via `topUp()` and refilled by
-  daily faucet claims.
+- Half of every trading fee accrues to the pool, half to the withdrawable treasury. The
+  pool is seeded via `topUp()` and refilled by daily faucet claims.
 
 ## Deployment (Spicy testnet, 88882)
 
@@ -170,9 +170,9 @@ Pushing `main` deploys `docs/` through `.github/workflows/pages.yml`. The public
 is read-only: market, player pages, charts and methodology work; portfolio/PnL needs the
 local Node API. Re-run the snapshot after an oracle update.
 
-Tests: `cd contracts && forge test` — 37 tests (20 token economics, 16 registry/oracle/fees,
+Tests: `cd contracts && forge test` — 44 tests (20 token economics, 23 registry/oracle/fees/treasury,
 1 invariant suite: reserve covers full redemption, NAV ≤ target, NAV near target when
-funded, holder wealth == reserve, core/token level consistency; runs=20, depth=200).
+funded, holder wealth == reserve, core/token level consistency, treasury fully backed; runs=20, depth=200).
 Oracle: `cd oracle && node --test test/*.mjs` — 18 tests.
 
 ## Self-review findings (fixed during the build)
@@ -221,10 +221,19 @@ Oracle: `cd oracle && node --test test/*.mjs` — 18 tests.
 The design follows the futuresports/FSPI model of an **index administrator** — the venue
 does not take a position; it defines methodology, publishes the record, and earns fees.
 
-**Revenue: trading fees.** Every buy and sell pays `FEE_BPS` (currently 1%/1%), routed
-on-chain to the core. The core clears zero-sum transfers between players and funds the
-small milestone mint; fees monetize activity and grow the reserve buffer. NAV is
-invariant to fees on both sides (fees are taken from the transfer, not from the reserve).
+**Revenue: trading fees.** Every buy and sell pays a fee (default 1%/1%, set on-chain
+when the token is created). The core splits each fee on arrival (`collectFee`):
+
+| Share | Bucket | Purpose | Withdrawable |
+|---|---|---|---|
+| 50% (`treasuryShareBps`) | Treasury | Venue revenue | Yes: admin `withdrawTreasury` → `treasury` address |
+| 50% | Pool | Funds level rises, grows the reserve buffer | No |
+
+The treasury share is admin-settable up to 80% (the pool always keeps at least 20% of
+every fee). Treasury CHZ is held in the core but excluded from `poolBalance()`, so it is
+never spent funding level rises, even when the pool runs dry. `node src/run.js treasury`
+shows the balance; `node src/run.js treasury all` withdraws it. NAV is invariant to
+fees on both sides (fees are taken from the transfer, not from the reserve).
 
 **Reserve health.** `node src/run.js report` and `/api/stats` track:
 - `totalTarget` — Σ supply × 100 CHZ × level / 7,500.00 across supplied tokens (the full claim)
@@ -254,5 +263,6 @@ reserve above base level back to the core. The UI shows a banner 21 days before
 year-end so holders can exit before the reset.
 
 **Known gap:** a single-signer oracle is a trust assumption; a production version
-needs multi-sig or zk-attested score feeds, and fee routing to a treasury multisig.
+needs multi-sig or zk-attested score feeds, and the treasury address and admin role
+held by a multisig.
 

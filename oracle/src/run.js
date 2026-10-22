@@ -7,6 +7,7 @@
 //   register            create on-chain player tokens + calibrate levels (admin)
 //   push                push changed levels on-chain (oracle)
 //   rebase              admin: calibrate all levels to computed values (no clamp)
+//   treasury [CHZ|all]  show treasury revenue; with an amount, withdraw it (admin)
 //   watch               loop: fetch new results, compute, push (default 15 min)
 import fs from "node:fs";
 import path from "node:path";
@@ -32,7 +33,7 @@ const SEEDS_FILE = `seeds-${SEASON}.json`;
 
 async function main() {
   const cmd = process.argv[2] || "help";
-  const commands = { backfill, compute, report, register, push, rebase, close, fees, watch, deployinfo, help };
+  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, watch, deployinfo, help };
   if (commands[cmd]) await commands[cmd](process.argv[3]);
   else commands.help();
 }
@@ -422,6 +423,21 @@ async function fees() {
   console.log("fees done");
 }
 
+/// Show treasury revenue; `treasury <CHZ|all>` withdraws it to the treasury
+/// address (admin). The pool is never touched.
+async function treasury(amount) {
+  const wallet = getWallet();
+  const coreW = getCore(wallet);
+  const [to, share, bal, pool] = await Promise.all([coreW.treasury(), coreW.treasuryShareBps(), coreW.treasuryBalance(), coreW.poolBalance()]);
+  console.log(`treasury ${to}: ${ethers.formatEther(bal)} CHZ withdrawable (share ${Number(share) / 100}% of fees); pool ${ethers.formatEther(pool)} CHZ`);
+  if (!amount) return;
+  const wei = amount === "all" ? bal : ethers.parseEther(amount);
+  if (wei === 0n) return;
+  const tx = await coreW.withdrawTreasury(wei, TX_OVERRIDES);
+  await tx.wait();
+  console.log(`withdrew ${ethers.formatEther(wei)} CHZ to ${to} (tx ${tx.hash.slice(0, 12)}…)`);
+}
+
 /// Publish the Official Daily Close for `day` (default: yesterday).
 /// Levels from all completed matches with startDate <= end of day, hashed.
 async function close(day) {
@@ -508,7 +524,7 @@ async function deployinfo() {
 }
 
 async function help() {
-  console.log(`commands: backfill compute report register push rebase close fees watch deployinfo`);
+  console.log(`commands: backfill compute report register push rebase close fees treasury watch deployinfo`);
 }
 
 main().catch((e) => {

@@ -142,6 +142,12 @@ async function buildStats() {
   const dep = JSON.parse(fs.readFileSync(path.join(stateDir, "deployments.json"), "utf8"));
   const core = dep.core;
   const coreBalance = await provider.getBalance(core).catch(() => 0n);
+  // treasury revenue sits in the core balance but never funds level rises
+  const treasuryBalance = await provider
+    .call({ to: core, data: ethers.id("treasuryBalance()").slice(0, 10) })
+    .then((x) => BigInt(x))
+    .catch(() => 0n); // pre-treasury cores have no such getter
+  const poolBalance = coreBalance > treasuryBalance ? coreBalance - treasuryBalance : 0n;
   const tokens = Object.values(registry).filter((r) => r.token);
   const supplySel = SEL.balanceOf; // reuse pattern below
   // read supply per token (batched), then reserve + level for supplied ones
@@ -172,6 +178,8 @@ async function buildStats() {
   return {
     updatedAt: new Date().toISOString(),
     coreBalance: coreBalance.toString(),
+    poolBalance: poolBalance.toString(),
+    treasuryBalance: treasuryBalance.toString(),
     suppliedTokens: supplied.length,
     totalTarget: totalTarget.toString(),
     totalReserve: totalReserve.toString(),

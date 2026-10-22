@@ -33,7 +33,8 @@ function targetReserve(uint256 supply, uint128 level) pure returns (uint256) {
 ///   level-implied target, so holder wealth tracks the player's index level.
 ///   If the core cannot fund fully, NAV simply floats below the target
 ///   (graceful degradation) and the token stays 100% reserve-backed.
-/// - Buy mints at NAV (fee to the core); sell burns and pays from the reserve.
+/// - Buy mints at NAV; sell burns and pays from the reserve. Fees go to the
+///   core's collectFee(), which splits them between treasury and pool.
 ///   Invariant: sells can never pay out more than the reserve holds, because
 ///   NAV is derived from the reserve itself.
 ///
@@ -144,7 +145,7 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
         out = (net * 1e18) / nav;
         if (out < minTokensOut) revert Slippage(minTokensOut, out);
         _mint(to, out);
-        if (fee > 0) _transferETH(core(), fee);
+        if (fee > 0) ITennisIndexCore(core()).collectFee{value: fee}();
         emit Bought(msg.sender, to, msg.value, out, nav);
     }
 
@@ -160,7 +161,7 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
         net = gross - fee;
         if (net < minChzOut) revert Slippage(minChzOut, net);
         _burn(msg.sender, tokenIn);
-        if (fee > 0) _transferETH(core(), fee);
+        if (fee > 0) ITennisIndexCore(core()).collectFee{value: fee}();
         _transferETH(to, net);
         emit Sold(msg.sender, to, tokenIn, net, nav);
     }

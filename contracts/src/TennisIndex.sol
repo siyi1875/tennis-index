@@ -21,6 +21,11 @@ import {PlayerToken, BASE_LEVEL, MAX_FEE_BPS, targetReserve} from "./PlayerToken
 /// player token's reserve up to the level-implied target (drawn from this
 /// contract's CHZ balance); when it falls the token sweeps the surplus back
 /// here. Fund this contract via topUp().
+///
+/// Fees are split on arrival (collectFee): `treasuryShareBps` is revenue the
+/// admin can withdraw to the `treasury` address; the rest joins the pool.
+/// The treasury's CHZ sits in this contract's balance but is never used to
+/// fund level rises — only `poolBalance()` is.
 contract TennisIndex is AccessControl, Pausable {
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -44,6 +49,13 @@ contract TennisIndex is AccessControl, Pausable {
     uint16 public defaultBuyFeeBps = 100; // 1%
     uint16 public defaultSellFeeBps = 100; // 1%
 
+    /// Revenue split of every trading fee. The pool always keeps at least
+    /// 20% of each fee, so fees keep rebuilding the reserve buffer.
+    uint16 public constant MAX_TREASURY_SHARE_BPS = 8_000;
+    uint16 public treasuryShareBps = 5_000; // 50% treasury / 50% pool
+    address public treasury; // payout address for withdrawTreasury
+    uint256 public treasuryBalance; // accrued, not yet withdrawn
+
     error UnknownPlayer(uint256 id);
     error LevelTooLow();
     error DeltaTooBig();
@@ -55,6 +67,9 @@ contract TennisIndex is AccessControl, Pausable {
     event SeasonReset(uint256 count);
     event ParamsUpdated(uint16 maxDeltaBps, uint64 minUpdateInterval);
     event DefaultFeesUpdated(uint16 buyBps, uint16 sellBps);
+    event FeeCollected(address indexed token, uint256 amount, uint256 toTreasury);
+    event TreasuryWithdrawn(address indexed to, uint256 amount);
+    event TreasuryUpdated(address treasury, uint16 shareBps);
 
     constructor(address admin, address oracle, address tokenImplementation_) {
         require(tokenImplementation_ != address(0), "impl");
@@ -62,12 +77,26 @@ contract TennisIndex is AccessControl, Pausable {
         _grantRole(ORACLE_ROLE, oracle);
         _grantRole(PAUSER_ROLE, admin);
         tokenImplementation = tokenImplementation_;
+        treasury = admin;
     }
 
     receive() external payable {}
 
     /// @notice Fund the counterparty pool that backs index performance gains.
     function topUp() external payable {}
+
+    /// @notice Trading fees from player tokens. Splits each fee between the
+    ///         treasury (withdrawable revenue) and the pool.
+    function collectFee() external payable {
+        uint256 toTreasury = (msg.value * treasuryShareBps) / 10_000;
+        treasuryBalance += toTreasury;
+        emit FeeCollected(msg.sender, msg.value, toTreasury);
+    }
+
+    /// @notice CHZ available to fund level rises (excludes the treasury).
+    function poolBalance() public view returns (uint256) {
+        return address(this).balance - treasuryBalance;
+    }
 
     // ------------------------------- views -------------------------------
 
@@ -202,7 +231,7 @@ contract TennisIndex is AccessControl, Pausable {
         uint256 rTarget = targetReserve(s, newLevel);
         if (rTarget > r) {
             funded = rTarget - r;
-            uint256 bal = address(this).balance;
+            uint256 bal = poolBalance();
             if (funded > bal) funded = bal;
         } else {
             swept = r - rTarget;
@@ -215,6 +244,22 @@ contract TennisIndex is AccessControl, Pausable {
     function setPlayerFees(uint256 id, uint16 buyBps, uint16 sellBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (buyBps > MAX_FEE_BPS || sellBps > MAX_FEE_BPS) revert();
         PlayerToken(payable(_players[id].token)).setFees(buyBps, sellBps);
+    }
+
+    /// @notice Pay accrued treasury revenue out to the treasury address.
+    ///         Works while paused: it never touches the pool.
+    function withdrawTreasury(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (amount > treasuryBalance) revert();
+        treasuryBalance -= amount;
+        (bool ok,) = treasury.call{value: amount}("");
+        if (!ok) revert();
+        emit TreasuryWithdrawn(treasury, amount);
+    }
+
+    function setTreasury(address treasury_, uint16 shareBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(treasury_ != address(0) && shareBps <= MAX_TREASURY_SHARE_BPS, "treasury");
+        (treasury, treasuryShareBps) = (treasury_, shareBps);
+        emit TreasuryUpdated(treasury_, shareBps);
     }
 
     /// @notice Fees for tokens registered from now on (existing tokens keep

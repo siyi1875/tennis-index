@@ -835,7 +835,8 @@ async function loadStats() {
     if (stats && !stats.error) {
       const ratio = stats.fundedRatio ?? 1;
       const cls = ratio >= 0.999 ? "acc" : ratio >= 0.9 ? "" : "down";
-      cells.push({ k: "Core reserve", v: `${(Number(stats.coreBalance) / 1e18).toFixed(2)} CHZ`, acc: false });
+      cells.push({ k: "Core reserve", v: `${(Number(stats.poolBalance ?? stats.coreBalance) / 1e18).toFixed(2)} CHZ`, acc: false });
+      cells.push({ k: "Treasury", v: `${(Number(stats.treasuryBalance ?? 0) / 1e18).toFixed(2)} CHZ` });
       cells.push({ k: "Reserve funded", v: `${(ratio * 100).toFixed(1)}%`, cls });
       cells.push({ k: "Open claim", v: `${(Number(stats.outstandingNeed) / 1e18).toFixed(3)} CHZ`, cls: ratio < 0.999 ? "down" : "" });
     } else {
