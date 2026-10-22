@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4ecd8">
+<title>Methodology & Docs — FSPI Tennis Index</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23d3e04f'/><path d='M6 10c6 4 14 4 20 0M6 22c6-4 14-4 20 0' stroke='%232d5f3a' stroke-width='2' fill='none'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4ecd8; --raised: #faf6ed; --sunk: #ede3cf; --well: #f7f1e1;
+    --line: #ddd2b8; --line-strong: #b9ab8c;
+    --ink: #262019; --ink-2: #6f6454; --ink-3: #9a8f7c;
+    --up: #2d5f3a; --down: #a83a3a; --up-soft: rgba(45,95,58,.1); --down-soft: rgba(168,58,58,.1);
+    --tennis: #cdd63f; --tennis-ink: #1c2205; --gold: #a67c1b; --gold-soft: rgba(166,124,27,.12);
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+    --r-xs: 6px; --r-sm: 8px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
+  }
+  [data-theme="night"] {
+    --paper: #1a1410; --raised: #231c15; --sunk: #130e09; --well: #1e1710;
+    --line: rgba(244,236,216,.08); --line-strong: rgba(244,236,216,.17);
+    --ink: #f2e8d3; --ink-2: #b4a58b; --ink-3: #877a63;
+    --up: #90cb9c; --down: #d98d77; --up-soft: rgba(144,203,156,.12); --down-soft: rgba(217,141,119,.12);
+    --tennis: #d3e04f; --tennis-ink: #1c2205; --gold: #e5c46a; --gold-soft: rgba(229,196,106,.13);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font: 400 14px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: rgba(205,214,63,.35); }
+  button, input { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--up); outline-offset: 2px; }
+
+  header {
+    display: flex; align-items: center; gap: 10px; height: 56px;
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(8px);
+    padding: 0 max(24px, calc(50vw - 640px));
+  }
+  .brand { display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; margin-right: 8px; }
+  .brand .mark { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--tennis); position: relative; overflow: hidden; }
+  .brand .mark::before, .brand .mark::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--tennis-ink); opacity: .85; }
+  .brand .mark::before { clip-path: inset(0 0 0 42%); }
+  .brand .mark::after { clip-path: inset(0 42% 0 0); border-style: dashed; }
+  .brand h1 { font: 600 14px/1 var(--sans); letter-spacing: .1px; }
+  .brand h1 em { font-style: normal; color: var(--ink-3); font-weight: 500; margin-left: 6px; }
+  .spacer { flex: 1; }
+  .navlink { font: 500 12.5px/1 var(--sans); color: var(--ink-2); padding: 8px 10px; border-radius: var(--r-sm); }
+  .navlink:hover { color: var(--ink); background: var(--sunk); }
+  .navlink.on { color: var(--ink); font-weight: 600; }
+  .icon-btn { background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: var(--r-full); width: 32px; height: 32px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: border-color .15s ease, color .15s ease; }
+  .icon-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+  #themeBtn .sun { display: none; } #themeBtn .moon { display: block; }
+  [data-theme="night"] #themeBtn .sun { display: block; } [data-theme="night"] #themeBtn .moon { display: none; }
+
+  .page { max-width: 1280px; margin: 0 auto; padding: 40px 24px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+  @media (max-width: 960px) { .page { grid-template-columns: 1fr; gap: 24px; } nav.toc { display: none; } }
+
+  nav.toc { position: sticky; top: 80px; align-self: start; font-size: 12.5px; }
+  nav.toc .cap { font: 500 10px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px; }
+  nav.toc a { display: block; padding: 5px 10px; color: var(--ink-2); border-radius: var(--r-xs); border-left: 2px solid transparent; }
+  nav.toc a:hover { color: var(--ink); background: var(--sunk); }
+  nav.toc a:target, nav.toc a.active { color: var(--ink); border-left-color: var(--up); font-weight: 600; }
+
+  .doc { max-width: 720px; }
+  .doc .kicker { font: 600 11px/1 var(--mono); color: var(--up); letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 14px; }
+  .doc h2 { font: 600 22px/1.3 var(--sans); letter-spacing: -.015em; margin: 44px 0 12px; scroll-margin-top: 76px; }
+  .doc h2:first-of-type { margin-top: 0; }
+  .doc h3 { font: 600 14.5px/1.4 var(--sans); margin: 26px 0 8px; }
+  .doc p { color: var(--ink-2); font-size: 13.5px; margin-bottom: 12px; max-width: 640px; }
+  .doc p b, .doc li b { color: var(--ink); }
+  .doc ul, .doc ol { color: var(--ink-2); font-size: 13.5px; padding-left: 20px; margin-bottom: 14px; }
+  .doc li { margin-bottom: 6px; }
+  .doc code { font: 500 12px/1 var(--mono); background: var(--sunk); border: 1px solid var(--line); padding: 1.5px 5px; border-radius: 4px; color: var(--ink); white-space: nowrap; }
+  .doc pre { background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  .doc pre code { font: 500 12px/1.7 var(--mono); background: none; border: 0; padding: 0; white-space: pre; color: var(--ink); }
+  .doc .formula { font: 500 13px/1.7 var(--mono); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px 16px; margin: 12px 0; color: var(--ink); overflow-x: auto; }
+  .doc .note { border-left: 3px solid var(--gold); background: var(--gold-soft); padding: 10px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: 12.5px; color: var(--ink-2); margin: 14px 0; }
+  .doc .note b { color: var(--gold); }
+
+  table.c { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 14px 0 20px; }
+  table.c th { font: 500 10.5px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .7px; text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-strong); }
+  table.c td { padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--ink-2); vertical-align: top; }
+  table.c td.num, table.c th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.c td:first-child { color: var(--ink); font-weight: 500; }
+  table.c tr:last-child td { border-bottom: 0; }
+
+  footer { max-width: 1280px; margin: 0 auto; padding: 22px 24px 40px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
+  footer a { text-decoration: underline; text-underline-offset: 3px; }
+  .addr { font-family: var(--mono); font-size: 11.5px; }
+</style>
+<script>
+(() => {
+  const files = { registry: 1, levels: 1, history: 1, close: 1, stats: 1, pushlog: 1 };
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    try {
+      const raw = typeof input === "string" ? input : input.url;
+      const u = new URL(raw, location.href);
+      const m = u.pathname.match(/\/api\/([a-z]+)/);
+      if (m && files[m[1]]) return nativeFetch(new URL("./data/" + m[1] + ".json", location.href), init);
+      if (m && m[1] === "portfolio") {
+        return Promise.resolve(new Response(JSON.stringify({
+          error: "Portfolio reads need the local API server. Run app/server.js to see live holdings and PnL."
+        }), { status: 200, headers: { "content-type": "application/json" } }));
+      }
+    } catch {}
+    return nativeFetch(input, init);
+  };
+})();
+</script>
+</head>
+<body>
+<header>
+  <div class="brand" onclick="location.href='/'">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>FSPI<em>tennis index</em></h1>
+  </div>
+  <span class="spacer"></span>
+  <a class="navlink" href="./index.html">Markets</a>
+  <a class="navlink on" href="./docs.html">Docs</a>
+  <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Toggle night mode">
+    <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  </button>
+</header>
+
+<div class="page">
+  <nav class="toc" id="toc">
+    <div class="cap">On this page</div>
+    <a href="#simple">0 · The simple version</a>
+    <a href="#overview">1 · What this is</a>
+    <a href="#indexing">2 · How indexing works</a>
+    <a href="#points">3 · Scoring</a>
+    <a href="#example">4 · Worked example</a>
+    <a href="#nav">5 · Level to NAV</a>
+    <a href="#trading">6 · How trading works</a>
+    <a href="#close">7 · Official Daily Close</a>
+    <a href="#record">8 · The record</a>
+    <a href="#architecture">9 · Architecture</a>
+    <a href="#limits">10 · Limitations</a>
+    <a href="#solvency">11 · How CME does it</a>
+    <a href="#path">12 · The build path</a>
+    <a href="#glossary">13 · Glossary</a>
+  </nav>
+
+  <main class="doc">
+    <div class="kicker">Methodology / 2026 season / Chiliz Spicy</div>
+    <p style="font-size:16px;color:var(--ink);max-width:600px"><b>FSPI Tennis Index</b> turns the ATP and WTA tours into a tradable market: every ranked player gets a token whose price is pinned to a transparent, fully-retraceable performance level.</p>
+
+    <h2 id="simple">0 · The simple version</h2>
+    <p><b>The token is a jar.</b> Every player token has its own CHZ jar. When you buy, your CHZ goes into the jar and fresh tokens are printed for you at the fair price. When you sell, your tokens are destroyed and CHZ comes back out of the same jar. There is always real money in the jar behind every token — nobody can be left holding nothing, because your sell doesn't need a buyer on the other side.</p>
+    <p><b>Points are a surprise scoreboard.</b> Every player starts the season on 7,500 points. Before each match the engine asks: how likely was this player to win? Win when you were expected to lose, and the level jumps. Win when everyone expected it, and it barely moves. Lose as a heavy favourite, and it falls hard. A Grand Slam final counts more than a small event's first round; sets and games add a small adjustment. A player's <b>level</b> is 7,500 plus their season points.</p>
+    <p><b>The price is the level divided by 7,500.</b> That's the whole formula. A player sitting at 7,500 costs 1 CHZ per token. If they beat expectations, their level rises and so does the price; if they fall short, both fall. So buying a token is a bet that the player will do <i>better than the market expects</i> — not simply that they will win. That is why an underdog can be the better buy: their wins are not priced in yet.</p>
+
+    <h2 id="overview">1 · What this is</h2>
+    <p>Each player has an on-chain token (one per player, e.g. <code>ATP-SIN</code> for Jannik Sinner). The token mints and burns at a NAV (net asset value) derived from that player's <b>level</b> — a season surprise score computed by a deterministic engine from official match results. Buy a player you think will beat expectations; sell one you think won't.</p>
+    <p>Three properties make the design honest:</p>
+    <ul>
+      <li><b>Backed 1:1.</b> Every token in circulation is fully collateralized by CHZ held against it. Supply can only change by minting (buy) or burning (sell) at NAV.</li>
+      <li><b>Retraceable.</b> Every level change maps to the exact matches that caused it — the UI exposes the trail, and the daily close is sha256-hashed so any number can be re-derived from the raw match file.</li>
+      <li><b>Capped updates.</b> On-chain level moves are limited to <b>±25% per push</b>, so a single data error can never gap a token's price.</li>
+    </ul>
+
+    <h2 id="indexing">2 · How indexing works</h2>
+    <h3>Season window</h3>
+    <p>The 2026 book tracks matches from <b>2026-07-01</b> (mid-year book start) through <b>December 31</b>. On <b>January 1</b> every level resets to the 7,500.00 base, and any reserve surplus above base levels is swept back to the core reserve. Positions carry into the new season at reset prices.</p>
+    <h3>Data pipeline</h3>
+    <ul>
+      <li><b>Source.</b> ESPN's public schedule/scoreboard feeds for ATP and WTA, plus ATP/WTA ranking snapshots that calibrate the opening ratings.</li>
+      <li><b>Backfill.</b> The keeper fetches completed matches per day since the season start, normalizes rounds and event names, and stores raw records with ESPN competition IDs (<code>compId</code>) — the key for idempotency.</li>
+      <li><b>Watch loop.</b> Every 15 minutes: pull new completed matches, apply them, push changed levels on-chain (batched, chunked), publish the Official Daily Close at 09:00 UTC, repair token fees, and top up the operator wallet from the Spicy faucet when low.</li>
+    </ul>
+    <h3>Eligibility rules</h3>
+    <ul>
+      <li>Only <b>completed</b> matches count; walkovers and retirements are excluded.</li>
+      <li>Only <b>tour-level singles</b>: team events (United Cup, Davis/BJK Cup, Laver Cup), exhibitions, Challengers and ITF are excluded outright (tier <code>EXCL</code>, multiplier 0).</li>
+      <li>Only <b>recognized rounds</b>: qualifying is skipped. ESPN labels early rounds "Round 1..4" without draw context — these are resolved per event using the event's named rounds (QF/SF/F) as anchors, falling back to match-count heuristics. Unresolvable rounds are skipped, never guessed.</li>
+    </ul>
+
+    <h2 id="points">3 · Scoring: performance vs expectation</h2>
+    <p>Every player starts the season on <b>7,500.00</b>. From there the level moves on <b>surprise</b>, not on win count. Before each match the engine computes an <b>expected win probability</b> from the two players' ratings:</p>
+    <div class="formula">p = 1 / (1 + 10^((rating_opponent − rating_you) / 400))<br>winner points = K × (1 − p_winner) × tier × round &nbsp;&nbsp;(K = 200)<br>loser points &nbsp;= −winner points<br>rating update = rating + 24 × (result − p)</div>
+    <p><b>Zero-sum by construction.</b> The winner gains exactly what the loser gives: <b>K × (1 − p)</b>. A match mints nothing. A favourite beating an underdog (p ≈ 0.9) moves the level by a few points; the same favourite losing moves it by roughly nine times as much; an underdog winning (p ≈ 0.2) captures most of the transfer. That is why buying an underdog can beat holding a constant winner — the favourite's wins are already in the price.</p>
+    <h3>Ratings (the expectation engine)</h3>
+    <table class="c">
+      <thead><tr><th>Parameter</th><th class="num">Value</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Starting rating</td><td class="num">1,500</td><td>unranked player</td></tr>
+        <tr><td>Rank calibration</td><td class="num">2,200 − 200 × log10(rank)</td><td>#1 ≈ 2,200 · #10 ≈ 2,000 · #100 ≈ 1,800</td></tr>
+        <tr><td>Rating K</td><td class="num">24</td><td>how fast a rating moves after a result</td></tr>
+        <tr><td>Points K</td><td class="num">200</td><td>scale of level points per match</td></tr>
+        <tr><td>Divisor</td><td class="num">400</td><td>400 rating points ≈ 10× odds</td></tr>
+      </tbody>
+    </table>
+    <p>Ratings are calibrated to the ranking snapshot at the start of the book and then move only through results. A rating is not the level: the rating sets the <i>expectation</i>, the level records the <i>surprise</i>.</p>
+    <h3>Stage weights (tier × round)</h3>
+    <p>The surprise base is multiplied by the stage — a Grand Slam final carries the most weight, a 250 first round the least.</p>
+    <table class="c">
+      <thead><tr><th>Tier</th><th>Examples</th><th class="num">Multiplier</th></tr></thead>
+      <tbody>
+        <tr><td>Grand Slam</td><td>Australian Open, Roland Garros, Wimbledon, US Open</td><td class="num">×1.5</td></tr>
+        <tr><td>Tour Finals</td><td>ATP / WTA Finals</td><td class="num">×1.25</td></tr>
+        <tr><td>Masters 1000 / WTA 1000</td><td>Indian Wells, Miami, Madrid, Rome, Doha, Wuhan…</td><td class="num">×1.0</td></tr>
+        <tr><td>500</td><td>Rotterdam, Dubai, Barcelona, Charleston, Tokyo…</td><td class="num">×0.7</td></tr>
+        <tr><td>250</td><td>all other tour-level events</td><td class="num">×0.5</td></tr>
+        <tr><td>Unclassified</td><td>unknown host (conservative fallback)</td><td class="num">×0.4</td></tr>
+        <tr><td>Excluded</td><td>team events, exhibitions, Challengers, ITF</td><td class="num">×0</td></tr>
+      </tbody>
+    </table>
+    <table class="c">
+      <thead><tr><th>Round</th><th class="num">Multiplier</th><th>Round</th><th class="num">Multiplier</th></tr></thead>
+      <tbody>
+        <tr><td>Final</td><td class="num">×1.00</td><td>Round of 32</td><td class="num">×0.40</td></tr>
+        <tr><td>Semifinal</td><td class="num">×0.85</td><td>Round of 64</td><td class="num">×0.30</td></tr>
+        <tr><td>Quarterfinal</td><td class="num">×0.70</td><td>Round of 96 / 128</td><td class="num">×0.25</td></tr>
+        <tr><td>Round of 16</td><td class="num">×0.55</td><td>Round robin</td><td class="num">×0.50</td></tr>
+      </tbody>
+    </table>
+    <h3>Margin stats (round-scaled, zero-sum)</h3>
+    <table class="c">
+      <thead><tr><th>Component</th><th class="num">Points</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Set won</td><td class="num">+4</td><td>per set</td></tr>
+        <tr><td>Set lost</td><td class="num">−4</td><td>signed — applied to both players</td></tr>
+        <tr><td>Game differential</td><td class="num">±0.2</td><td>per net game won/lost</td></tr>
+        <tr><td>Bagel (6-0 set)</td><td class="num">±2</td><td>extra weight for a shutout set</td></tr>
+      </tbody>
+    </table>
+    <p>Stats are a small adjustment on top of the surprise transfer. They are symmetric: whatever one player gains, the other gives.</p>
+    <h3>Milestones (surprise-scaled, once per event)</h3>
+    <table class="c">
+      <thead><tr><th>Result</th><th class="num">Base points</th></tr></thead>
+      <tbody>
+        <tr><td>Title</td><td class="num">+200</td></tr>
+        <tr><td>Runner-up</td><td class="num">+100</td></tr>
+        <tr><td>Semifinal</td><td class="num">+50</td></tr>
+        <tr><td>Quarterfinal</td><td class="num">+25</td></tr>
+      </tbody>
+    </table>
+    <p>Milestones are the only new points. Each is multiplied by the tier and by the <b>surprise of the decisive match</b> — the player's pre-match win probability in the final (title / runner-up), the quarterfinal (semifinalist) or the round of 16 (quarterfinalist). A season scale of <b>0.25</b> keeps the total mint near zero. An underdog title (p = 0.2966) at a Masters earns <b>200 × 1.0 × 0.7034 × 0.25 = 35.17</b>; the same title as a heavy favourite (p = 0.7034) earns <b>14.83</b>.</p>
+
+    <h2 id="example">4 · Worked example</h2>
+    <p><b>The same 6-4, 6-3 win, two different expectations.</b> A Masters (tier ×1.0) Round of 32 (round ×0.40), Player A rated <b>1,850</b> against Player B rated <b>2,000</b>:</p>
+    <div class="formula">p(A wins) = 1 / (1 + 10^((2,000 − 1,850)/400)) = 0.2966
+
+A wins (upset):
+  base:   200 × (1 − 0.2966) × 1.0 × 0.4 = +56.27
+  stats:  (2 sets × 4 + 5 games × 0.2) × 0.4 = +3.60
+  total:  +59.87
+
+B wins (expected):
+  base:   200 × (1 − 0.7034) × 1.0 × 0.4 = +23.73
+  stats:  +3.60
+  total:  +27.33</div>
+    <p>The same scoreline pays <b>2.2×</b> more when the underdog wins. The loser gives exactly the winner's points, so the match mints nothing. If A goes on to win the title with a 29.66% final expectation, the milestone is <b>200 × 1.0 × (1 − 0.2966) × 0.25 = 35.17</b>; a 70.34% favourite winning the same title earns <b>14.83</b>.</p>
+    <p>Every number is integer math in centi-points — deterministic and replayable from the match file.</p>
+
+    <h2 id="nav">5 · From level to NAV</h2>
+    <p>A token's NAV (price per token in CHZ) is its level scaled by the base:</p>
+    <div class="formula">NAV = level ÷ 7,500 &nbsp;&nbsp; e.g. level 7,878.85 → NAV 1.0505 CHZ/token
+reserve target = supply × NAV</div>
+    <p>The core contract keeps every token fully backed: when a level rises, the target reserve rises and the keeper tops the difference up from the core pool; when it falls, the surplus is swept back. <b>Reserve = supply × NAV</b> holds at all times — the <a href="./index.html" style="color:var(--up);font-weight:600">market page</a> shows the live funded ratio.</p>
+
+    <h2 id="trading">6 · How trading works</h2>
+    <p>There is no order book. Each player token is its own mint/burn pool pinned to NAV:</p>
+    <ul>
+      <li><b>Buy</b> — send CHZ to <code>buy(minTokensOut)</code>. 1% fee is taken, the remainder buys at the current NAV. The token is minted to you.</li>
+      <li><b>Sell</b> — call <code>sell(tokenIn, minChzOut)</code>. Tokens burn at NAV, minus the 1% sell fee; CHZ goes to your wallet.</li>
+      <li><b>Slippage guard</b> — the UI computes <code>minOut</code> at 2% below the on-chain NAV and reverts if the level moved against you mid-transaction.</li>
+      <li><b>Fee → core reserve</b> — all trading fees accumulate in the core contract as the reserve buffer. It's the venue's only revenue, and it grows with volume, not with your losses.</li>
+      <li><b>Zero cold-start</b> — because tokens mint on demand, a brand-new player token is instantly tradeable with zero idle capital. The first buyer sets the pool.</li>
+    </ul>
+    <div class="note"><b>Season reset.</b> On January 1, levels reset to 7,500.00 and each token's reserve is rebased; any surplus above the base level returns to the core reserve. Consider your positions before the reset — the UI shows a countdown in the last 21 days of the season.</div>
+
+    <h2 id="close">7 · The Official Daily Close</h2>
+    <p>Intraday level pushes are <b>indicative</b> — they can arrive out of order and are capped at ±25%. Once a day at <b>09:00 UTC</b>, the keeper recomputes <i>all</i> levels from the complete eligible match set and publishes the <b>Official Daily Close</b>: the day, match count, player count and a <b>sha256 hash</b> of the full level table.</p>
+    <ul>
+      <li>The close is the <b>settlement print</b> — what payouts, licensing deals and disputes reference.</li>
+      <li>It is <b>retraceable</b>: hash the level table from <code>close-2026.json</code>, or replay <code>matches-2026.json</code> through the published engine, and you get the same number.</li>
+      <li>The header badge on the market page shows the latest close (day + hash prefix).</li>
+    </ul>
+
+    <h2 id="record">8 · The record</h2>
+    <p>Every artifact needed to audit the index lives in <code>oracle/state/</code> and is served read-only via the UI's API:</p>
+    <table class="c">
+      <thead><tr><th>File</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td><code>matches-2026.json</code></td><td>raw eligible match stream (idempotent by compId)</td></tr>
+        <tr><td><code>state-2026.json</code></td><td>season state: per-player level points, ratings, per-event rounds and expectations</td></tr>
+        <tr><td><code>levels-2026.json</code></td><td>current published levels (2dp) served to the UI</td></tr>
+        <tr><td><code>history-2026.json</code></td><td>daily level snapshots + per-match expectation and points</td></tr>
+        <tr><td><code>pushlog-2026.json</code></td><td>every on-chain level push: tx hash and pushed levels</td></tr>
+        <tr><td><code>close-2026.json</code></td><td>official daily closes with sha256 hashes</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="architecture">9 · Architecture & addresses</h2>
+    <ul>
+      <li><b>Chain.</b> Chiliz Spicy testnet — chainId <code>88882</code>, RPC <code>spicy-rpc.chiliz.com</code>, explorer <code>spicy.chiliscan.com</code>.</li>
+      <li><b>Core</b> <span class="addr">0xb4b1839683ec021599cf38057005709e42e42da2</span> — the index contract: player registry, oracle-gated level feed with ±25% cap, reserve accounting, fee routing, season reset. Roles: <code>ORACLE_ROLE</code> (level feed), <code>PAUSER_ROLE</code>, admin.</li>
+      <li><b>PlayerToken</b> (implementation <span class="addr">0x8fe41d434f719e38a55eb4b45498b2fbcfbbb15b</span>) — one ERC-20 per player with <code>buy()</code>/<code>sell()</code> mint/burn at NAV, per-token fees, and its own CHZ reserve.</li>
+      <li><b>Keeper</b> — the oracle node (<code>oracle/src/run.js</code>): backfill, compute, push, close, fee repair, faucet. 202 players registered and calibrated; watch loop running continuously.</li>
+      <li><b>UI</b> — static SPA + a small Node server that serves state files and does read-only on-chain portfolio scans. Wallets connect via EIP-6963; trades are signed by your wallet, never proxied.</li>
+    </ul>
+
+    <h2 id="limits">10 · Limitations</h2>
+    <ul>
+      <li>Testnet demo: real contracts, real transactions, play-money CHZ from the Spicy faucet.</li>
+      <li>Data latency: ESPN feeds update on their schedule; live in-progress matches are not scored until complete.</li>
+      <li>Single oracle operator — the cap (±25%/push), pausable core and hash-chained closes are the current trust mitigations; a production deployment would add multi-operator oracles and threshold signing.</li>
+      <li>Intraday NAV is indicative; only the Official Daily Close is settlement-grade.</li>
+      <li><b>Expectation, not strength.</b> The level measures surprise, not absolute quality. A dominant favourite can lose points while winning as expected; an underdog can gain more from one upset than a champion gains from a title defence. The opening rating is calibrated to the ranking snapshot; from then on it moves only through results.</li>
+      <li><b>Token coverage.</b> 202 of the 677 tracked players have live tokens. A player outside the registered set can rank highly on the index before a token is deployed; the market table marks them "soon" and the detail page explains that they are not yet tradeable.</li>
+      <li>Not financial advice; no real-money value.</li>
+    </ul>
+
+    <h2 id="solvency">11 · How regulated futures (FSPI × CME) solve solvency</h2>
+    <p>Our design borrows FutureSports' benchmark discipline: a published, retraceable index and a daily settlement print. The scoring itself is expectation-relative, so match results transfer points between players rather than minting them. The difference is the venue: on <b>July 29, 2026</b> CME Group announced a partnership to list futures and options on FutureSports Performance Indexes, and on <b>August 11, 2026</b> it announced the world's first index-based hockey futures (launched September 28, pending CFTC review) — monthly and quarterly <b>cash-settled</b>, in standard (10× index value) and micro (1/10) sizes, with central clearing and methodologies aligned to the <b>IOSCO Principles for Financial Benchmarks</b>.</p>
+    <h3>Why a futures exchange never faces our "vault pays the winners" problem</h3>
+    <p>With zero-sum match scoring the core is already closer to a clearinghouse than a bookmaker: it moves points from losers to winners and mints only the small, surprise-scaled milestones. The remaining directional risk sits in the tokens themselves, which are fully collateralized.</p>
+    <ul>
+      <li><b>Two-sided handshakes.</b> A futures contract is a bet between two traders. Every buyer (long) is matched with a seller (short), so the crowd is its own counterparty and the market is zero-sum. The exchange holds no directional book at all.</li>
+      <li><b>Margin + daily settlement.</b> Traders post collateral before trading; positions are marked to market daily and cash moves from losers to winners at each mark (that is exactly what our Official Daily Close is the analogue of). Traders who can't cover their losses are liquidated; a member-funded default fund backstops the rest.</li>
+      <li><b>Role separation.</b> FutureSports is the <i>index administrator</i> — it computes and publishes the benchmark (zero market risk, earns licensing/data fees). CME is the venue and clearer (fees, no directional risk). The traders take the risk — from each other. The league supplies data but does not participate in index determination or governance.</li>
+    </ul>
+    <h3>What this demo already shares / what to adopt next</h3>
+    <ul>
+      <li><b>Shared:</b> the Official Daily Close (≈ daily mark-to-market), the ±25% push cap (≈ circuit breaker), published retraceable methodology, and zero-sum match scoring. Our reserve model is <i>stricter</i> than futures margin (100% collateralized); with surprise-based transfers the core mainly clears points and funds a small milestone mint.</li>
+      <li><b>Next:</b> (1) add a short side — pair-mint LONG+SHORT so crowd P&amp;L nets to zero and the core never pays directional profit; (2) settle fees and funding at the daily close; (3) hold an insurance buffer from fee income and add per-wallet position limits; (4) court natural hedgers (sponsors, arena operators, broadcasters) who create genuine two-sided flow; (5) adopt benchmark-administrator governance (published change procedures, independence) if the benchmark itself becomes the product.</li>
+    </ul>
+    <h3>Is a short side "just betting"?</h3>
+    <p>With shorts, users pay users — that is true of every two-sided market, including CME's. What separates trading from betting is not <i>who pays whom</i>; it is structure and purpose:</p>
+    <ul>
+      <li><b>Asset vs. wager.</b> A continuously-priced token on a published performance index can be held, traded, and exited at any time at a market price. A bet is a fixed-odds wager on an outcome that settles once. Our tokens are already the former — even long-only.</li>
+      <li><b>Neutral house vs. house edge.</b> An exchange earns the rake on volume and has no interest in your P&amp;L. A bookmaker sets the odds and profits when you lose. Long-only reserve tokens make the venue the counterparty — structurally closer to a bookmaker; adding shorts makes it neutral — closer to an exchange or a peer-to-peer betting market.</li>
+      <li><b>Hedgers vs. punters.</b> Markets with real-world exposures to offset (sponsors, broadcasters, arena operators) are risk transfer; markets with only directional speculators are wagering. CME's launch materials are explicit that hedgers are the target.</li>
+      <li><b>Rulebook.</b> Financial benchmarks (IOSCO principles) and derivatives regulation versus gaming regulation. Same economics, different wrapper — and regulators are actively contesting exactly this line for event contracts.</li>
+    </ul>
+
+    <h2 id="path">12 · The build path for a small team</h2>
+    <p>Every market product has three roles: the <b>scorekeeper</b> (methodology, oracle, settlement print — FutureSports), the <b>venue</b> (matching, margin, licenses, capital float — CME), and the <b>crowd</b> (traders and hedgers). Licensing and capital are the venue's requirements; engineering is the scorekeeper's. This project occupies the scorekeeper slot and rents the venue later.</p>
+    <ul>
+      <li><b>Stage 0 — testnet lab (live).</b> Play-money on Chiliz Spicy. Proves the methodology, accumulates hash-chained closes, costs faucet gas. Zero regulatory surface.</li>
+      <li><b>Stage 1 — free-to-play, closed-loop.</b> Same contracts; the money leg becomes an in-game chip with <i>no cash-out</i>. The venue issues its own currency, so the solvency problem disappears and reserve backing becomes optional (NAV remains the pricing rule). Monetize with passes, cosmetics and sponsored prize pools. The Sorare precedent is the cautionary case: cash-out is what triggers gambling classification.</li>
+      <li><b>Stage 2 — benchmark licensing.</b> A season of verifiable closes is an asset: license the feed and record to fantasy apps, media, analytics — or to a licensed venue as its settlement benchmark. Zero market risk, the FutureSports slot.</li>
+      <li><b>Stage 3 — real-money leg, on someone else's license.</b> If proven, integrate with a licensed exchange/sportsbook: they hold user funds and carry the licenses; we supply scores and settlement prints. The pair-mint short-side design waits in the drawer for this day.</li>
+    </ul>
+    <p><b>Known risks:</b> athlete names are facts but likeness merchandising needs counsel; ESPN public feeds are adequate for consumer products but an institutional benchmark needs league data rights; a trading UI without engagement flow dies quietly — Stage 1 is a game first, market second; FutureSports currently covers NHL/MLB teams, but tennis athletes remain a watch item.</p>
+
+    <h2 id="glossary">13 · Glossary</h2>
+    <table class="c">
+      <tbody>
+        <tr><td>Level</td><td>A player's season score: 7,500 + points earned by beating expectation.</td></tr>
+        <tr><td>Rating</td><td>The engine's estimate of a player's strength; sets the expected win probability.</td></tr>
+        <tr><td>Expected score (p)</td><td>Pre-match win probability derived from the two ratings.</td></tr>
+        <tr><td>Surprise</td><td><code>1 − p_winner</code>; the size of the level transfer. The loser gives the winner's amount.</td></tr>
+        <tr><td>Zero-sum</td><td>Every point a winner gains, the loser gives. A match mints nothing.</td></tr>
+        <tr><td>NAV</td><td>Net asset value per token in CHZ = level ÷ 7,500.</td></tr>
+        <tr><td>Centi-point (cp)</td><td>Internal integer unit: 1.00 level point = 100 cp.</td></tr>
+        <tr><td>Push cap</td><td>On-chain level updates are limited to ±25% per push (<code>maxDeltaBps = 2500</code>).</td></tr>
+        <tr><td>Calibration</td><td>Admin-only one-off set of a token's level to computed truth, bypassing the push cap (used at registration).</td></tr>
+        <tr><td>Official Daily Close</td><td>Frozen 09:00 UTC settlement levels, sha256-hashed.</td></tr>
+        <tr><td>Funded ratio</td><td>Σ actual reserves ÷ Σ required reserves across supplied tokens.</td></tr>
+        <tr><td>Core reserve</td><td>The core's CHZ clearing balance, fed by trading fees; sweeps at season end.</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+
+<footer>
+  FSPI Tennis Index — demo on Chiliz Spicy testnet. Data: ESPN · Chain: 88882 · <a href="./index.html">Market</a> · <a href="./docs.html">Docs</a>. Not financial advice.
+</footer>
+
+<script>
+function applyTheme(t) {
+  if (t === "night") document.documentElement.dataset.theme = "night";
+  else delete document.documentElement.dataset.theme;
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.content = t === "night" ? "#1a1410" : "#f4ecd8";
+}
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "night" ? "day" : "night";
+  localStorage.setItem("fspi_theme", next);
+  applyTheme(next);
+}
+document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(localStorage.getItem("fspi_theme") === "night" ? "night" : "day");
+  const links = [...document.querySelectorAll("nav.toc a")];
+  const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        links.forEach((a) => a.classList.remove("active"));
+        byId.get(e.target.id)?.classList.add("active");
+      }
+    }
+  }, { rootMargin: "-70px 0px -60% 0px" });
+  document.querySelectorAll(".doc h2[id]").forEach((h) => obs.observe(h));
+});
+</script>
+</body>
+</html>

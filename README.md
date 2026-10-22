@@ -152,6 +152,17 @@ cd ../app && node server.js          # http://localhost:8080
 `contracts/.deploy/env` is gitignored. Only the oracle writer, registration and demo
 scripts need it; the UI and read-only API work without a key. Never use a mainnet key.
 
+### Public demo (GitHub Pages)
+
+```bash
+node app/server.js &            # stats endpoint
+node scripts/build-pages.mjs    # snapshot data + UI into docs/
+```
+
+Pushing `main` deploys `docs/` through `.github/workflows/pages.yml`. The public demo
+is read-only: market, player pages, charts and methodology work; portfolio/PnL needs the
+local Node API. Re-run the snapshot after an oracle update.
+
 Tests: `cd contracts && forge test` — 32 tests (17 token economics, 12 registry/oracle,
 1 invariant suite: reserve covers full redemption, NAV ≤ target, NAV near target when
 funded, holder wealth == reserve, core/token level consistency; runs=20, depth=200).
