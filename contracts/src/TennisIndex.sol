@@ -36,8 +36,9 @@ import {
 /// The treasury's CHZ sits in this contract's balance but is never used to
 /// fund level rises — only `poolBalance()` is.
 ///
-/// Live matches: the oracle halt()s a player shortly before their scheduled
-/// start. While halted, the player's token queues orders instead of filling
+/// Live matches: the oracle posts each day's order of play in advance
+/// (scheduleHalts); a player's token halts automatically at their scheduled
+/// start, with no transaction needed at match time. While halted, the player's token queues orders instead of filling
 /// them; the oracle's post-match updateLevel() lifts the halt and fills the
 /// queue at the new price in the same transaction, so nobody can trade on a
 /// result the price does not yet reflect. Every oracle transaction is also a
@@ -77,10 +78,13 @@ contract TennisIndex is AccessControl, Pausable {
     address public treasury; // payout address for withdrawTreasury
     uint256 public treasuryBalance; // accrued, not yet withdrawn
 
-    /// Live-match halts, keyed by token. Halted tokens queue their orders.
-    mapping(address => bool) public halted;
+    /// Live-match halts, keyed by token: halted from this timestamp on (0 =
+    /// none). Halted tokens queue their orders until the post-match push.
+    mapping(address => uint64) public haltFrom;
     uint64 public lastHeartbeat; // last oracle transaction
-    uint64 public heartbeatMaxAge = 20 minutes;
+    /// Halts are posted ahead of time, so this only guards matches the oracle
+    /// never got to schedule; a short outage need not stop all trading.
+    uint64 public heartbeatMaxAge = 1 hours;
 
     /// Season carry-over price scale per token (wei; 0 means 1e18).
     mapping(address => uint256) internal _navScale;
@@ -99,7 +103,7 @@ contract TennisIndex is AccessControl, Pausable {
     event FeeCollected(address indexed token, uint256 amount, uint256 toTreasury);
     event TreasuryWithdrawn(address indexed to, uint256 amount);
     event TreasuryUpdated(address treasury, uint16 shareBps);
-    event Halted(uint256 indexed id);
+    event HaltScheduled(uint256 indexed id, uint64 from);
     event Resumed(uint256 indexed id);
     event Heartbeat(uint64 at);
     event HeartbeatMaxAgeUpdated(uint64 maxAge);
@@ -131,7 +135,13 @@ contract TennisIndex is AccessControl, Pausable {
     function tradeStatus(address token) external view returns (uint8) {
         if (paused()) return TRADE_PAUSED;
         if (block.timestamp > uint256(lastHeartbeat) + heartbeatMaxAge) return TRADE_STALE;
-        return halted[token] ? TRADE_QUEUED : TRADE_OPEN;
+        return halted(token) ? TRADE_QUEUED : TRADE_OPEN;
+    }
+
+    /// @notice True while a token's halt is in effect.
+    function halted(address token) public view returns (bool) {
+        uint64 from = haltFrom[token];
+        return from != 0 && block.timestamp >= from;
     }
 
     /// @notice Season carry-over scale (1e18 until the token's first reset).
@@ -247,7 +257,7 @@ contract TennisIndex is AccessControl, Pausable {
         if (id >= _players.length) revert UnknownPlayer(id);
         if (newLevel < MIN_LEVEL) revert LevelTooLow();
         Player storage p = _players[id];
-        bool live = halted[p.token];
+        bool live = halted(p.token);
         if (!live && p.lastUpdate != 0 && block.timestamp < p.lastUpdate + minUpdateInterval) revert TooSoon();
         uint256 old = p.level;
         uint256 diff = newLevel > old ? newLevel - old : old - newLevel;
@@ -267,21 +277,28 @@ contract TennisIndex is AccessControl, Pausable {
         for (uint256 i; i < ids.length; ++i) updateLevel(ids[i], levels[i]);
     }
 
-    /// @notice Halt players whose match is about to start (by schedule, before
-    ///         the first point): their tokens queue orders until the result.
-    function halt(uint256[] calldata ids) external onlyRole(ORACLE_ROLE) {
+    /// @notice Halt players from their scheduled start (before the first
+    ///         point): from then on their tokens queue orders until the result.
+    ///         Posted ahead of time, so halts take effect even if the oracle is
+    ///         down when play starts. An earlier time replaces a later one;
+    ///         a time in the past halts immediately.
+    function scheduleHalts(uint256[] calldata ids, uint64[] calldata froms) external onlyRole(ORACLE_ROLE) {
+        if (ids.length != froms.length) revert();
         for (uint256 i; i < ids.length; ++i) {
             if (ids[i] >= _players.length) revert UnknownPlayer(ids[i]);
             address token = _players[ids[i]].token;
-            if (halted[token]) continue;
-            halted[token] = true;
-            emit Halted(ids[i]);
+            uint64 from = froms[i] < block.timestamp ? uint64(block.timestamp) : froms[i];
+            uint64 cur = haltFrom[token];
+            if (cur != 0 && cur <= from) continue;
+            haltFrom[token] = from;
+            emit HaltScheduled(ids[i], from);
         }
         _beat();
     }
 
-    /// @notice Lift halts with no level change (walkover, cancellation,
-    ///         unchanged level); queued orders fill at the current price.
+    /// @notice Lift or cancel halts with no level change (walkover with no
+    ///         level effect, cancellation, postponement); queued orders fill at
+    ///         the current price.
     function resume(uint256[] calldata ids) external onlyRole(ORACLE_ROLE) whenNotPaused {
         for (uint256 i; i < ids.length; ++i) {
             if (ids[i] >= _players.length) revert UnknownPlayer(ids[i]);
@@ -321,10 +338,12 @@ contract TennisIndex is AccessControl, Pausable {
         emit Heartbeat(uint64(block.timestamp));
     }
 
+    /// @dev Clears an active or scheduled halt. Orders can only have queued
+    ///      while it was active; settling an empty queue is a no-op.
     function _resume(uint256 id) internal {
         PlayerToken tok = PlayerToken(payable(_players[id].token));
-        if (!halted[address(tok)]) return;
-        halted[address(tok)] = false;
+        if (haltFrom[address(tok)] == 0) return;
+        haltFrom[address(tok)] = 0;
         emit Resumed(id);
         tok.settleQueue();
     }

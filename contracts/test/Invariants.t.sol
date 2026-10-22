@@ -107,8 +107,10 @@ contract PlayerTokenInvariants is Test {
     function doHalt() public {
         uint256[] memory ids = new uint256[](1);
         ids[0] = seedId;
+        uint64[] memory froms = new uint64[](1);
+        froms[0] = uint64(block.timestamp);
         vm.prank(oracle);
-        core.halt(ids);
+        core.scheduleHalts(ids, froms);
     }
 
     /// Post-match push: lifts the halt and fills the queue at the new price.

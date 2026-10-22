@@ -42,8 +42,10 @@ contract LiveMatchTest is Test {
     }
 
     function _halt() internal {
+        uint64[] memory froms = new uint64[](1);
+        froms[0] = uint64(block.timestamp);
         vm.prank(oracle);
-        core.halt(_ids());
+        core.scheduleHalts(_ids(), froms);
     }
 
     function _push(uint128 level) internal {
@@ -227,7 +229,7 @@ contract LiveMatchTest is Test {
     function test_onlyOracleHaltsAndResumes() public {
         uint256[] memory ids = _ids();
         vm.expectRevert();
-        core.halt(ids);
+        core.scheduleHalts(ids, new uint64[](1));
         vm.expectRevert();
         core.resume(ids);
         vm.expectRevert();
@@ -237,7 +239,7 @@ contract LiveMatchTest is Test {
     // ----------------------------- heartbeat -----------------------------
 
     function test_staleOracleStopsAllTrading() public {
-        vm.warp(block.timestamp + 21 minutes);
+        vm.warp(block.timestamp + 61 minutes);
         vm.prank(attacker);
         vm.expectRevert(PlayerToken.OracleStale.selector);
         tok.buy{value: 100 ether}(attacker, 0);
@@ -365,5 +367,62 @@ contract LiveMatchTest is Test {
         assertEq(tok.epoch(), 1);
         (uint256 got,) = tok.claim(0, attacker);
         assertEq(got, 0.99e18); // filled at the second match's post-match price
+    }
+
+    // -------------------------- scheduled halts --------------------------
+
+    function _schedule(uint64 from) internal {
+        uint64[] memory froms = new uint64[](1);
+        froms[0] = from;
+        vm.prank(oracle);
+        core.scheduleHalts(_ids(), froms);
+    }
+
+    /// The halt takes effect at the scheduled start with no oracle transaction
+    /// at match time (the oracle may be down when play starts).
+    function test_scheduledHaltStartsOnItsOwn() public {
+        _schedule(uint64(block.timestamp + 30 minutes));
+        vm.prank(attacker);
+        assertGt(tok.buy{value: 100 ether}(attacker, 0), 0); // before the match: instant
+        vm.warp(block.timestamp + 30 minutes);
+        assertTrue(core.halted(address(tok)));
+        vm.prank(attacker);
+        assertEq(tok.buy{value: 100 ether}(attacker, 0), 0); // match time: queued
+    }
+
+    function test_earliestScheduledStartWins() public {
+        uint64 t = uint64(block.timestamp);
+        _schedule(t + 2 hours);
+        _schedule(t + 1 hours);
+        assertEq(core.haltFrom(address(tok)), t + 1 hours);
+        _schedule(t + 3 hours); // later time does not delay the halt
+        assertEq(core.haltFrom(address(tok)), t + 1 hours);
+    }
+
+    function test_pastStartHaltsImmediately() public {
+        vm.warp(10 days);
+        vm.prank(oracle);
+        core.heartbeat();
+        _schedule(uint64(block.timestamp - 1 hours)); // already in progress
+        assertTrue(core.halted(address(tok)));
+        assertEq(core.haltFrom(address(tok)), block.timestamp);
+    }
+
+    function test_pushBeforeStartKeepsTheSchedule() public {
+        uint64 from = uint64(block.timestamp + 1 hours);
+        _schedule(from);
+        _push(760_000); // e.g. a late result from yesterday
+        assertEq(core.haltFrom(address(tok)), from);
+        assertFalse(core.halted(address(tok)));
+    }
+
+    function test_resumeCancelsAScheduledHalt() public {
+        _schedule(uint64(block.timestamp + 1 hours)); // then the player withdraws
+        vm.prank(oracle);
+        core.resume(_ids());
+        assertEq(core.haltFrom(address(tok)), 0);
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(attacker);
+        assertGt(tok.buy{value: 100 ether}(attacker, 0), 0);
     }
 }
