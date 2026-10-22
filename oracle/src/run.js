@@ -247,12 +247,14 @@ async function register() {
       const evs = rc.logs
         .map((l) => { try { return coreW.interface.parseLog(l); } catch { return null; } })
         .filter((x) => x?.name === "PlayerAdded");
-      chunk.forEach((id, k) => {
+      for (const [k, id] of chunk.entries()) {
         const v = levels.get(id);
         const ev = evs.find((e) => e?.args?.symbol === symbols[k]);
         const onChainId = Number(ev?.args?.id ?? (count + i + k));
-        registry.byId[id] = { onChainId, name: v.name, symbol: symbols[k], tour: v.tour, level: v.level2dp, tx: rc.hash };
-      });
+        // the token address is what the UI and server trade against
+        const token = ev?.args?.token ?? (await coreW.player(onChainId)).token;
+        registry.byId[id] = { onChainId, name: v.name, symbol: symbols[k], tour: v.tour, level: v.level2dp, tx: rc.hash, token };
+      }
       saveJson("registry.json", registry);
       console.log(`batch ${Math.floor(i / CHUNK)}: +${evs.length} players (tx ${rc.hash.slice(0, 12)}…, gas ${rc.gasUsed}, ~${(Number(rc.gasUsed) * 2.7e-6).toFixed(2)} CHZ)`);
     } catch (e) {
