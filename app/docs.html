@@ -253,8 +253,10 @@ reserve target = supply × NAV</div>
       <li><b>Slippage guard</b> — the UI computes <code>minOut</code> at 2% below the on-chain NAV and reverts if the level moved against you mid-transaction.</li>
       <li><b>Fee → core reserve</b> — all trading fees accumulate in the core contract as the reserve buffer. It's the venue's only revenue, and it grows with volume, not with your losses.</li>
       <li><b>Zero cold-start</b> — because tokens mint on demand, a brand-new player token is instantly tradeable with zero idle capital. The first buyer sets the pool.</li>
+      <li><b>Live matches</b> — from 15 minutes before a player's scheduled start until their result is on-chain, their token does not fill orders instantly. Buys and sells are <b>queued</b> and all fill together at the <b>post-match price</b>; you then claim the tokens or CHZ. Nobody can trade on a result the price does not yet reflect, in either direction. Queued orders cannot be cancelled. The halt times are posted on-chain ahead of time from the order of play.</li>
+      <li><b>Results feed offline</b> — if the oracle has not reported for an hour, all trading pauses rather than run on a stale price.</li>
     </ul>
-    <div class="note"><b>Season reset.</b> On January 1, levels reset to 7,500.00 and each token's reserve is rebased; any surplus above the base level returns to the core reserve. Consider your positions before the reset — the UI shows a countdown in the last 21 days of the season.</div>
+    <div class="note"><b>Season reset.</b> On January 1 every level returns to 7,500.00 for the new season, but <b>token prices carry over unchanged</b>: each token keeps its price and the new season's results move it from there. No CHZ moves at the reset, so there is nothing to sell before it.</div>
 
     <h2 id="close">7 · The Official Daily Close</h2>
     <p>Intraday level pushes are <b>indicative</b> — they can arrive out of order and are capped at ±25%. Once a day at <b>09:00 UTC</b>, the keeper recomputes <i>all</i> levels from the complete eligible match set and publishes the <b>Official Daily Close</b>: the day, match count, player count and a <b>sha256 hash</b> of the full level table.</p>
@@ -290,7 +292,7 @@ reserve target = supply × NAV</div>
     <h2 id="limits">10 · Limitations</h2>
     <ul>
       <li>Testnet demo: real contracts, real transactions, play-money CHZ from the Spicy faucet.</li>
-      <li>Data latency: ESPN feeds update on their schedule; live in-progress matches are not scored until complete.</li>
+      <li>Data latency: ESPN feeds update on their schedule; a match scores once it is complete. Its players stay in queue mode until then, so the delay costs fill time, never a stale price.</li>
       <li>Single oracle operator — the cap (±25%/push), pausable core and hash-chained closes are the current trust mitigations; a production deployment would add multi-operator oracles and threshold signing.</li>
       <li>Intraday NAV is indicative; only the Official Daily Close is settlement-grade.</li>
       <li><b>Expectation, not strength.</b> The level measures surprise, not absolute quality. A dominant favourite can lose points while winning as expected; an underdog can gain more from one upset than a champion gains from a title defence. The opening rating is calibrated to the ranking snapshot; from then on it moves only through results.</li>

@@ -45,8 +45,34 @@ app/  (static UI: lists players, MetaMask buy/sell)
   scoreboards from `site.api.espn.com`, classifies tournaments/rounds, applies the
   expectation-relative (zero-sum, surprise-weighted) scoring with integer centi-point
   math, and pushes only *changed* levels. Runs in three modes: `backfill` (season build, disk-cached), `register`
-  (deploy tokens + seed levels), `watch` (continuous: fetch → compute → push, every
-  15 min, with automatic faucet top-up when the gas balance runs low).
+  (deploy tokens + seed levels), `watch` (continuous: fetch → compute → push → halts,
+  every 5 min, with automatic faucet top-up when the gas balance runs low).
+
+## Live matches, the queue and the season reset
+
+- **Halts from the order of play.** The oracle posts each registered player's halt time
+  (15 min before their scheduled start) on-chain ahead of time (`scheduleHalts`); the
+  halt starts on its own at that time, even if the oracle is down. While halted, the
+  token **queues** buys and sells: buy CHZ is held aside (`pendingChz`, never part of the
+  reserve), sell tokens are escrowed and still carry the result. The post-match
+  `updateLevel` lifts the halt and fills the batch at the single post-match price in the
+  same transaction; users `claim(epoch, who)` their fills (the UI and portfolio show
+  them). Orders cannot be cancelled. A player is only released when nothing about them
+  is unpriced (no live/due match, no unscored result, on-chain level = computed level);
+  an open token with an unpriced result is halted immediately.
+- **Heartbeat.** Every oracle transaction is a heartbeat; after `heartbeatMaxAge` (1 h)
+  of silence all trading reverts (`OracleStale`). A fresh deployment is closed until the
+  oracle's first transaction.
+- **Early rounds score from day 1.** ESPN labels them "Round N"; the oracle records each
+  event's round labels from the boards (incl. TBD placeholders for later rounds) so the
+  draw structure is known before any QF is played.
+- **Season reset carries prices over.** `seasonReset` returns levels to 7,500.00 and sets
+  a per-token scale so each token keeps its price; no CHZ moves, so there is no reset
+  uplift to buy into and no need to exit. Run `node src/run.js seasonreset` on Jan 1,
+  then switch `SEASON`/`SEASON_START`.
+- **Buy pricing.** Buys pay the level-implied price, or the real NAV when the token is
+  underfunded beyond wei rounding; a dust first buy or a CHZ donation cannot make later
+  buyers overpay. The last holder out takes the whole reserve.
 
 - **UI** (`app/`): single-page app served by `app/server.js` (port 8080). Market view with
   sortable levels, deltas, sparklines; per-player detail with the retraceable level chart
@@ -138,7 +164,9 @@ node src/run.js rebase       # admin: calibrate all levels to computed values
 node src/run.js fees         # admin: re-price existing tokens to FEE_BPS (new tokens get the on-chain default)
 node src/run.js close [day]  # publish Official Daily Close (default: yesterday)
 node tools/backtest.mjs      # season drift, reserve cost and platform economics
-env WATCH_INTERVAL_MIN=15 node src/run.js watch   # continuous oracle (push, close)
+node src/run.js halts        # one pass: post halts, release priced players, heartbeat
+node src/run.js seasonreset  # Jan 1: levels to 7,500.00, prices carry over (oracle)
+env WATCH_INTERVAL_MIN=5 node src/run.js watch    # continuous oracle (push, halts, close)
 cd ../app && node server.js  # UI on :8080
 ```
 
@@ -170,10 +198,13 @@ Pushing `main` deploys `docs/` through `.github/workflows/pages.yml`. The public
 is read-only: market, player pages, charts and methodology work; portfolio/PnL needs the
 local Node API. Re-run the snapshot after an oracle update.
 
-Tests: `cd contracts && forge test` — 44 tests (20 token economics, 23 registry/oracle/fees/treasury,
-1 invariant suite: reserve covers full redemption, NAV ≤ target, NAV near target when
-funded, holder wealth == reserve, core/token level consistency, treasury fully backed; runs=20, depth=200).
-Oracle: `cd oracle && node --test test/*.mjs` — 18 tests.
+Tests: `cd contracts && forge test` — 79 tests (26 token economics and rounding, 23
+registry/oracle/fees/treasury, 29 live-match queue/heartbeat/scheduled halts/season
+carry-over incl. attack replays, 1 invariant suite fuzzing buy/sell/transfer/level
+change/halt/post-match push/claim handlers: reserve covers full redemption, reserve
+within dust of target, holder wealth == reserve, queue fully backed and every claim
+succeeds, treasury fully backed, core/token level consistency; runs=100, depth=200).
+Oracle: `cd oracle && node --test test/*.mjs` — 30 tests.
 
 ## Self-review findings (fixed during the build)
 
@@ -208,9 +239,11 @@ Oracle: `cd oracle && node --test test/*.mjs` — 18 tests.
   only exposes current ranks), so players already active before launch were seeded from
   the launch-day ranking. Seeds are then frozen; a late-reported match can still shift
   the rating sequence of the two players involved.
-- Early-round resolution depends on an event having at least one named round (QF/SF/F)
-  before its early matches count; live events score with a small lag.
-- The watch loop only fetches yesterday+today; a longer outage needs a backfill re-run.
+- The watch loop fetches yesterday/today/tomorrow; a longer outage needs a backfill re-run.
+  Players with results from the gap stay halted (queue mode) until those results are
+  scored, so an outage delays fills but never exposes a stale price.
+- Walkovers score like wins (pre-existing rule). A withdrawal announced before the
+  scheduled start is public while the token still trades until its halt time.
 - Season backfill seeds levels retroactively at launch ("calibration"), then updates are
   capped at ±25% per push by the on-chain guard.
 - The counterparty pool is a single hot wallet's faucet income; it degrades gracefully
@@ -258,9 +291,9 @@ This is the artifact a derivatives venue would license: settlement-by-constructi
 no reserve requirement, no annual-reset cost. The per-player tokens provide the real
 spot leg that makes basis arbitrage against such futures possible.
 
-**Season reset.** Levels reset to 7,500.00 on Jan 1; `seasonReset` sweeps surplus
-reserve above base level back to the core. The UI shows a banner 21 days before
-year-end so holders can exit before the reset.
+**Season reset.** Levels reset to 7,500.00 on Jan 1 while token prices carry over
+(per-token scale); no CHZ moves, so the reset is neither a cost to the pool nor an
+arbitrage. The UI's year-end banner says so.
 
 **Known gap:** a single-signer oracle is a trust assumption; a production version
 needs multi-sig or zk-attested score feeds, and the treasury address and admin role
