@@ -5,6 +5,19 @@ import {ERC20Upgradeable} from "openzeppelin-contracts-upgradeable/token/ERC20/E
 import {ReentrancyGuardUpgradeable} from "openzeppelin-contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {ITennisIndexCore} from "./ITennisIndexCore.sol";
 
+// Levels are 2dp: 750_000 == 7,500.00, the season base level.
+uint128 constant BASE_LEVEL = 750_000;
+// Token price at the base level: 100 CHZ. Price scales linearly with level.
+uint256 constant CHZ_AT_BASE = 100;
+// Highest fee either side may charge (5%).
+uint16 constant MAX_FEE_BPS = 500;
+
+// Level-implied reserve for `supply` tokens (wei CHZ). Shared by the token
+// (sweep) and the core (funding) so both sides use exactly the same target.
+function targetReserve(uint256 supply, uint128 level) pure returns (uint256) {
+    return (supply * uint256(level) * CHZ_AT_BASE) / BASE_LEVEL;
+}
+
 /// @title PlayerToken
 /// @notice Tradable index token for one tennis player (FSPI-style Points
 ///         Attribution Table computed off-chain, levels fed on-chain by the
@@ -12,6 +25,7 @@ import {ITennisIndexCore} from "./ITennisIndexCore.sol";
 ///         clone from the implementation registered in the core.
 ///
 /// Economic model
+/// - At the base level (7,500.00) one token is priced at 100 CHZ.
 /// - NAV (wei CHZ per 1 token) = reserve / totalSupply once supply exists;
 ///   before that it is the level-implied target NAV, read from the core.
 /// - The core registry is the performance counterparty: on every index level
@@ -29,8 +43,6 @@ import {ITennisIndexCore} from "./ITennisIndexCore.sol";
 contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
     uint256 private constant _PACKED_FEES_MASK = ((1 << 32) - 1) << 64;
     uint256 private _packed; // core (160b) | buyFee (16b) | sellFee (16b) | symbol (8 chars, LE)
-
-    uint128 public constant BASE_LEVEL = 750_000;
 
     event Bought(address indexed buyer, address indexed to, uint256 chzIn, uint256 tokensOut, uint256 navWad);
     event Sold(address indexed seller, address indexed to, uint256 tokensIn, uint256 chzOut, uint256 navWad);
@@ -50,15 +62,18 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
     /// @dev Only the core calls this, atomically right after clone creation,
     ///      so re-initialization is impossible; the `_packed != 0` guard is a
     ///      cheap backstop that also skips the OZ Initializable slot write.
-    function initialize(string calldata symbol_, address core_) external {
+    ///      Fees are live from the first trade (no fee-free window).
+    function initialize(string calldata symbol_, address core_, uint16 buyBps, uint16 sellBps) external {
         if (_packed != 0) revert();
         if (core_ == address(0)) revert ZeroAmount();
+        if (buyBps > MAX_FEE_BPS || sellBps > MAX_FEE_BPS) revert FeeTooHigh();
         bytes memory b = bytes(symbol_);
         if (b.length == 0 || b.length > 8) revert BadSymbol();
         uint64 sym;
         for (uint256 i = 0; i < b.length; ++i) sym |= uint64(uint8(b[i])) << (8 * i);
-        // core | fees(0) | symbol
-        _packed = (uint256(uint160(core_)) << 96) | uint256(sym);
+        // core | sellFee | buyFee | symbol
+        _packed = (uint256(uint160(core_)) << 96) | (uint256(sellBps) << 80) | (uint256(buyBps) << 64) | uint256(sym);
+        emit FeesUpdated(buyBps, sellBps);
     }
 
     function core() public view returns (address) {
@@ -74,7 +89,7 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
     }
 
     function setFees(uint16 buyBps, uint16 sellBps) external onlyCore {
-        if (buyBps > 500 || sellBps > 500) revert FeeTooHigh();
+        if (buyBps > MAX_FEE_BPS || sellBps > MAX_FEE_BPS) revert FeeTooHigh();
         _packed = (_packed & ~_PACKED_FEES_MASK) | (uint256(buyBps) << 64) | (uint256(sellBps) << 80);
         emit FeesUpdated(buyBps, sellBps);
     }
@@ -100,9 +115,9 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
         return address(this).balance;
     }
 
-    /// @dev Level-implied NAV: level is 2dp (750000 -> 1 CHZ per token).
+    /// @dev Level-implied NAV: level is 2dp (750000 -> 100 CHZ per token).
     function targetNav(uint128 level) public pure returns (uint256) {
-        return (uint256(level) * 1e18) / BASE_LEVEL;
+        return targetReserve(1e18, level);
     }
 
     /// @notice Actual NAV in wei CHZ per token. Before any supply exists this
@@ -164,7 +179,7 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
             return;
         }
         uint256 r = address(this).balance; // includes any funding attached
-        uint256 rTarget = (s * uint256(newLevel)) / BASE_LEVEL;
+        uint256 rTarget = targetReserve(s, newLevel);
         if (r > rTarget) {
             // Sweep surplus back to the core counterparty pool.
             _transferETH(core(), r - rTarget);

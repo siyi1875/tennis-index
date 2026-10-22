@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "openzeppelin-contracts/access/AccessControl.sol";
 import {Pausable} from "openzeppelin-contracts/utils/Pausable.sol";
 import {Clones} from "openzeppelin-contracts/proxy/Clones.sol";
-import {PlayerToken} from "./PlayerToken.sol";
+import {PlayerToken, BASE_LEVEL, MAX_FEE_BPS, targetReserve} from "./PlayerToken.sol";
 
 /// @title TennisIndex
 /// @notice Registry of ATP/WTA player performance indexes (FSPI-style) with an
@@ -39,7 +39,10 @@ contract TennisIndex is AccessControl, Pausable {
     uint16 public maxDeltaBps = 2_500; // ±25% per oracle update
     uint64 public minUpdateInterval = 30 minutes;
     uint128 public constant MIN_LEVEL = 10_000; // 100.00
-    uint128 public constant BASE_LEVEL = 750_000; // 7,500.00
+
+    /// Fees every new token starts with (bps). Live from the first trade.
+    uint16 public defaultBuyFeeBps = 100; // 1%
+    uint16 public defaultSellFeeBps = 100; // 1%
 
     error UnknownPlayer(uint256 id);
     error LevelTooLow();
@@ -51,6 +54,7 @@ contract TennisIndex is AccessControl, Pausable {
     event LevelCalibrated(uint256 indexed id, uint128 oldLevel, uint128 newLevel);
     event SeasonReset(uint256 count);
     event ParamsUpdated(uint16 maxDeltaBps, uint64 minUpdateInterval);
+    event DefaultFeesUpdated(uint16 buyBps, uint16 sellBps);
 
     constructor(address admin, address oracle, address tokenImplementation_) {
         require(tokenImplementation_ != address(0), "impl");
@@ -93,7 +97,7 @@ contract TennisIndex is AccessControl, Pausable {
         PlayerToken tok = PlayerToken(payable(p.token));
         uint256 s = tok.totalSupply();
         uint256 r = tok.reserveWad();
-        uint256 rTarget = (s * uint256(p.level)) / BASE_LEVEL;
+        uint256 rTarget = targetReserve(s, p.level);
         required = rTarget > r ? rTarget - r : 0;
     }
 
@@ -108,7 +112,7 @@ contract TennisIndex is AccessControl, Pausable {
         returns (uint256 id)
     {
         address clone = Clones.clone(tokenImplementation);
-        PlayerToken(payable(clone)).initialize(symbol, address(this));
+        PlayerToken(payable(clone)).initialize(symbol, address(this), defaultBuyFeeBps, defaultSellFeeBps);
         if (initialLevel < MIN_LEVEL) revert LevelTooLow();
         if (initialLevel == 0) initialLevel = BASE_LEVEL;
         id = _players.length;
@@ -130,7 +134,7 @@ contract TennisIndex is AccessControl, Pausable {
         firstId = _players.length;
         for (uint256 i; i < n; ++i) {
             address clone = Clones.clone(tokenImplementation);
-            PlayerToken(payable(clone)).initialize(symbols[i], address(this));
+            PlayerToken(payable(clone)).initialize(symbols[i], address(this), defaultBuyFeeBps, defaultSellFeeBps);
             uint128 lvl = initialLevels[i];
             if (lvl < MIN_LEVEL) revert LevelTooLow();
             if (lvl == 0) lvl = BASE_LEVEL;
@@ -195,7 +199,7 @@ contract TennisIndex is AccessControl, Pausable {
         uint256 s = tok.totalSupply();
         if (s == 0) return (0, 0);
         uint256 r = tok.reserveWad();
-        uint256 rTarget = (s * uint256(newLevel)) / BASE_LEVEL;
+        uint256 rTarget = targetReserve(s, newLevel);
         if (rTarget > r) {
             funded = rTarget - r;
             uint256 bal = address(this).balance;
@@ -209,8 +213,16 @@ contract TennisIndex is AccessControl, Pausable {
     // ------------------------------ admin ------------------------------
 
     function setPlayerFees(uint256 id, uint16 buyBps, uint16 sellBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (buyBps > 500 || sellBps > 500) revert();
+        if (buyBps > MAX_FEE_BPS || sellBps > MAX_FEE_BPS) revert();
         PlayerToken(payable(_players[id].token)).setFees(buyBps, sellBps);
+    }
+
+    /// @notice Fees for tokens registered from now on (existing tokens keep
+    ///         theirs; change those with setPlayerFees).
+    function setDefaultFees(uint16 buyBps, uint16 sellBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (buyBps > MAX_FEE_BPS || sellBps > MAX_FEE_BPS) revert();
+        (defaultBuyFeeBps, defaultSellFeeBps) = (buyBps, sellBps);
+        emit DefaultFeesUpdated(buyBps, sellBps);
     }
 
     function setMaxDeltaBps(uint16 bps) external onlyRole(DEFAULT_ADMIN_ROLE) {

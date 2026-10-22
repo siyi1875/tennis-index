@@ -165,7 +165,7 @@ async function buildStats() {
   }));
   let totalTarget = 0n, totalReserve = 0n;
   for (const t of supplied) {
-    const target = (t.supply * BigInt(t.level)) / 750000n;
+    const target = (t.supply * BigInt(t.level) * 100n) / 750000n; // 100 CHZ per token at 7,500.00 (PlayerToken.targetReserve)
     totalTarget += target;
     totalReserve += t.reserve;
   }

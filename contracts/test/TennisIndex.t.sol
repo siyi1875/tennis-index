@@ -32,7 +32,7 @@ contract TennisIndexTest is Test {
         PlayerToken tok = PlayerToken(payable(p.token));
         assertEq(tok.core(), address(core));
         assertEq(core.tokenLevel(p.token), BASE);
-        assertEq(tok.navWad(), 1e18); // s==0 NAV reads level from core
+        assertEq(tok.navWad(), 100e18); // 100 CHZ at base; s==0 NAV reads level from core
         assertEq(tok.symbol(), "ATP-TST");
         assertEq(tok.name(), "FSPI Tennis ATP-TST");
     }
@@ -121,5 +121,66 @@ contract TennisIndexTest is Test {
         TennisIndex.Player[] memory ps = core.playersRange(0, 2);
         assertEq(ps.length, 2);
         assertEq(ps[1].level, BASE);
+    }
+
+    function test_priceScalesLinearlyFrom100ChzAtBase() public {
+        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        assertEq(tok.targetNav(BASE), 100 ether);
+        assertEq(tok.targetNav(779_556), 103.940800 ether); // 7,795.56 -> 103.9408 CHZ
+        assertEq(tok.targetNav(600_000), 80 ether);
+    }
+
+    /// New tokens charge the default 1%/1% from the very first trade: there is
+    /// no fee-free window waiting for an off-chain job to switch fees on.
+    function test_newTokenChargesDefaultFeesFromFirstTrade() public {
+        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        assertEq(tok.buyFeeBps(), 100);
+        assertEq(tok.sellFeeBps(), 100);
+        vm.prank(user);
+        uint256 out = tok.buy{value: 10 ether}(user, 0);
+        assertEq(address(core).balance, 0.1 ether); // 1% of the first buy
+        assertEq(out, 0.099e18); // 9.9 CHZ net at 100 CHZ/token
+        vm.prank(user);
+        uint256 net = tok.sell(out, user, 0);
+        assertEq(net, 9.801 ether); // 1% of 9.9 gross
+        assertEq(address(core).balance, 0.199 ether);
+    }
+
+    function test_setDefaultFeesAppliesToNewTokensOnly() public {
+        PlayerToken first = PlayerToken(payable(core.player(_add(BASE)).token));
+        vm.prank(admin);
+        core.setDefaultFees(50, 200);
+        PlayerToken second = PlayerToken(payable(core.player(_add(BASE)).token));
+        assertEq(first.buyFeeBps(), 100);
+        assertEq(first.sellFeeBps(), 100);
+        assertEq(second.buyFeeBps(), 50);
+        assertEq(second.sellFeeBps(), 200);
+        // batched registration uses the defaults too
+        string[] memory syms = new string[](1);
+        syms[0] = "WTA-B";
+        uint8[] memory tours = new uint8[](1);
+        tours[0] = 2;
+        uint128[] memory lv = new uint128[](1);
+        lv[0] = BASE;
+        vm.prank(admin);
+        uint256 id = core.addPlayers(syms, tours, lv);
+        assertEq(PlayerToken(payable(core.player(id).token)).sellFeeBps(), 200);
+    }
+
+    function test_setDefaultFeesAdminOnlyAndCapped() public {
+        vm.expectRevert();
+        core.setDefaultFees(100, 100);
+        vm.prank(admin);
+        vm.expectRevert();
+        core.setDefaultFees(501, 100);
+        vm.prank(admin);
+        vm.expectRevert();
+        core.setDefaultFees(100, 501);
+    }
+
+    function test_tokenCannotBeReinitialized() public {
+        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
+        vm.expectRevert();
+        tok.initialize("X", address(this), 0, 0);
     }
 }

@@ -532,7 +532,7 @@ async function render() {
       <td class="num">${fmtDelta(r.d1)}</td>
       <td class="num">${fmtDelta(r.d7)}</td>
       <td>${spark(r.series)}</td>
-      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav) : (r.level / 750000).toFixed(4)) : (r.reg?.token ? (r.level / 750000).toFixed(4) : `<span class="tok">—</span>`)}</td>
+      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav, 2) : (r.level / 7500).toFixed(2)) : (r.reg?.token ? (r.level / 7500).toFixed(2) : `<span class="tok">—</span>`)}</td>
       <td>${r.reg?.token ? `<span class="tok-pill">LIVE</span>` : `<span class="tok none">soon</span>`}</td>
     </tr>`).join("") + (withD.length > 40
       ? `<tr class="more-row"><td colspan="8">…and ${withD.length - 40} more (search to narrow)</td></tr>` : "");
@@ -542,7 +542,7 @@ async function render() {
     const tk = await tokenStats(r.reg.token);
     if (!tk) return;
     const cell = document.querySelector(`td[data-token="${r.reg.token}"]`);
-    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav) : (r.level / 750000).toFixed(4);
+    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav, 2) : (r.level / 7500).toFixed(2);
   })).catch(() => {});
 }
 
@@ -756,7 +756,7 @@ async function refreshTokenPanel(reg) {
             ethCall(reg.token, SEL.balanceOf + acc.slice(2).toLowerCase().padStart(64, "0")),
           ]);
           $("walletBal").textContent = eth(BigInt(bal), 3) + " CHZ";
-          $("holdBal").textContent = eth(BigInt(hold), 4) + " " + reg.symbol;
+          $("holdBal").textContent = eth(BigInt(hold), 6) + " " + reg.symbol;
         }
       } catch {}
     }
@@ -764,9 +764,11 @@ async function refreshTokenPanel(reg) {
 }
 
 function toWei(amount) {
-  const v = Number(amount);
-  if (!isFinite(v) || v <= 0) return null;
-  return BigInt(Math.round(v * 1e18));
+  // exact decimal -> wei (Number() would round 18-decimal amounts)
+  const m = String(amount).trim().match(/^(\d*)(?:\.(\d*))?$/);
+  if (!m || (!m[1] && !m[2])) return null;
+  const v = BigInt(m[1] || "0") * 10n ** 18n + BigInt(((m[2] || "") + "0".repeat(18)).slice(0, 18));
+  return v > 0n ? v : null;
 }
 function toU256(hexStr) { return hexStr.slice(2).padStart(64, "0"); }
 
@@ -784,7 +786,7 @@ async function doBuy(token) {
       method: "eth_sendTransaction",
       params: [{ from: acc, to: token, value: "0x" + value.toString(16), data }],
     });
-    msg.className = "msg ok"; msg.textContent = `Sent tx ${tx.slice(0, 10)}… — NAV pins near ${eth(nav, 4)} CHZ per token.`;
+    msg.className = "msg ok"; msg.textContent = `Sent tx ${tx.slice(0, 10)}… — NAV pins near ${eth(nav, 2)} CHZ per token.`;
     tokenCache.delete(token);
     await updateWalletUi();
     if (view === "profile") await loadPortfolio();
@@ -909,7 +911,7 @@ function renderProfile() {
   const rows = holdings.map((h) => `
     <tr class="row" onclick="select('${h.espnId ?? ""}');showMarket()">
       <td class="nm">${esc(h.symbol)} <span class="tok">${esc(h.name)}</span></td>
-      <td class="num">${eth(BigInt(h.balance), 4)}</td>
+      <td class="num">${eth(BigInt(h.balance), 6)}</td>
       <td class="num">${eth(BigInt(h.nav), 4)}</td>
       <td class="num">${eth(BigInt(h.value), 4)}</td>
       <td class="num">${eth(BigInt(h.invested), 4)}</td>
@@ -920,7 +922,7 @@ function renderProfile() {
   const fills = (d.fills ?? []).map((f) => {
     const ts = f.ts ? new Date(f.ts * 1000).toISOString().slice(0, 10) : "";
     const px = Number(BigInt(f.nav)) / 1e18;
-    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 4)} tok @ ${px.toFixed(4)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
+    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 6)} tok @ ${px.toFixed(2)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
   }).join("");
   $("pfPanel").innerHTML = `
     <div class="pf-head">

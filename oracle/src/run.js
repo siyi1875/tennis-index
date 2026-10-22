@@ -23,7 +23,7 @@ import { ethers } from "ethers";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEASON = process.env.SEASON || "2026";
 const SEASON_START = process.env.SEASON_START || "20260701"; // tracking starts mid-year; SEASON_START=20260101 for full season
-const FEE_BPS = Number(process.env.FEE_BPS || 100); // venue fee on buy+sell -> core prize pool
+const FEE_BPS = Number(process.env.FEE_BPS || 100); // venue fee on buy+sell (`fees` command only; new tokens use the core's on-chain default)
 const CLOSE_HOUR_UTC = Number(process.env.CLOSE_HOUR_UTC || 9);
 const TOURS = ["atp", "wta"];
 
@@ -400,33 +400,26 @@ async function rebase() {
   console.log(`rebase done: ${sent} txs sent`);
 }
 
-/// Turn on venue fees for every token that has supply (fees refill the core
-/// prize pool; unsupplied tokens are skipped — nobody pays fees on them).
-/// Run automatically in watch; `node src/run.js fees` forces it.
+/// Re-price fees on existing tokens to FEE_BPS/FEE_BPS. New tokens already
+/// start with the core's default fees (set on-chain at creation), so this is
+/// only for deliberate changes; it no longer runs in watch.
 async function fees() {
   const wallet = getWallet();
   const coreW = getCore(wallet);
   const { players } = await onchainPlayers();
   const jobs = [];
   for (const p of players) {
-    const tok = new ethers.Contract(p.token, ["function totalSupply() view returns (uint256)", "function buyFeeBps() view returns (uint16)"], wallet);
-    const [s, fee] = await Promise.all([tok.totalSupply(), tok.buyFeeBps()]);
-    if (s > 0n && Number(fee) !== FEE_BPS) jobs.push({ id: p.id, token: p.token });
+    const tok = new ethers.Contract(p.token, ["function buyFeeBps() view returns (uint16)", "function sellFeeBps() view returns (uint16)"], wallet);
+    const [buyFee, sellFee] = await Promise.all([tok.buyFeeBps(), tok.sellFeeBps()]);
+    if (Number(buyFee) !== FEE_BPS || Number(sellFee) !== FEE_BPS) jobs.push({ id: p.id, token: p.token });
   }
-  console.log(`fees: ${jobs.length} supplied tokens need ${FEE_BPS}/${FEE_BPS} bps`);
+  console.log(`fees: ${jobs.length} tokens need ${FEE_BPS}/${FEE_BPS} bps`);
   for (const j of jobs) {
     const tx = await coreW.setPlayerFees(j.id, FEE_BPS, FEE_BPS, TX_OVERRIDES);
     await tx.wait();
     console.log(`fees set: player #${j.id} -> ${FEE_BPS}/${FEE_BPS} bps`);
   }
   console.log("fees done");
-}
-
-let lastFeesRun = 0;
-async function ensureFeesInWatch() {
-  if (Date.now() - lastFeesRun < 60 * 60 * 1000) return;
-  lastFeesRun = Date.now();
-  try { await fees(); } catch (e) { console.error(`ensureFees failed: ${(e.message || "").slice(0, 120)}`); }
 }
 
 /// Publish the Official Daily Close for `day` (default: yesterday).
@@ -480,7 +473,6 @@ async function watch() {
       await compute();
       await push();
       await maybePublishClose();
-      await ensureFeesInWatch();
       await maybeClaimFaucet();
     } catch (e) {
       console.error(`watch iteration failed: ${e.message?.slice(0, 300)}`);

@@ -33,8 +33,13 @@ app/  (static UI: lists players, MetaMask buy/sell)
   - `PlayerToken.sol` — ERC-20 clone. NAV = `reserve / supply` once supply exists;
     before that it is the level-implied target read from the core (`tokenLevel`).
     `buy` mints at NAV, `sell` burns and pays from the reserve. Fees (≤ 5%) route to
-    the core. One packed storage slot holds `core | buyFee | sellFee | symbol(8ch)`.
+    the core and are set at creation from the core's `defaultBuyFeeBps/defaultSellFeeBps`
+    (1%/1%), so every token charges fees from its first trade. One packed storage slot
+    holds `core | buyFee | sellFee | symbol(8ch)`.
   - Levels use 2 decimals: `750_000 == 7,500.00`; minimum level `100.00`.
+  - Price: **100 CHZ per token at the base level**, linear in level
+    (`NAV = 100 CHZ × level / 7,500`; e.g. 7,795.56 → 103.94 CHZ). Tokens have 18
+    decimals, so any fraction can be bought.
 
 - **Oracle** (`oracle/`): fetches ATP/WTA rankings (150 deep, weekly) and daily
   scoreboards from `site.api.espn.com`, classifies tournaments/rounds, applies the
@@ -73,7 +78,9 @@ points; each is multiplied by the tier and by the surprise of the decisive match
 then by a 0.25 season scale to keep net inflation near zero.
 
 Ratings start from the ranking snapshot (`2,200 - 200 x log10(rank)`; unranked 1,500)
-and move only through results. Tier multipliers: GS ×1.5, Tour Finals ×1.25, 1000 ×1.0,
+and move only through results. The seed rank is **frozen at first sight**
+(`oracle/state/seeds-<season>.json`): weekly ranking updates never re-rate matches
+already played, so a level only moves when its player plays. Tier multipliers: GS ×1.5, Tour Finals ×1.25, 1000 ×1.0,
 500 ×0.7, 250 ×0.5, unknown ×0.4. Round multipliers: F ×1.0, SF ×0.85, QF ×0.7,
 R16 ×0.55, R32 ×0.4, R64 ×0.3, R96/R128 ×0.25, RR ×0.5.
 
@@ -88,7 +95,7 @@ rounds; a 4th-deep round maps to R128 vs R96 by match count (≥40 → 128-draw)
   paid CHZ to the reserve; sells pay `tokens × NAV` from the reserve. Solvency is
   structural: the reserve can always cover full redemption.
 - The **core is the counterparty**: on a level rise it funds each token's reserve up to
-  `supply × newLevel / 750000` (capped at its balance — graceful degradation if the pool
+  `supply × 100 CHZ × newLevel / 750000` (capped at its balance — graceful degradation if the pool
   is short, NAV floats below target but stays fully backed); on a fall the token sweeps
   the surplus back to the core.
 - Trading fees accrue to the core pool. The pool is seeded via `topUp()` and refilled by
@@ -128,10 +135,10 @@ node src/run.js compute      # rebuild state + levels + history
 node src/run.js register     # deploy tokens for new players (admin)
 node src/run.js push         # push changed levels (oracle)
 node src/run.js rebase       # admin: calibrate all levels to computed values
-node src/run.js fees         # admin: set 1%/1% fees on supplied tokens
+node src/run.js fees         # admin: re-price existing tokens to FEE_BPS (new tokens get the on-chain default)
 node src/run.js close [day]  # publish Official Daily Close (default: yesterday)
 node tools/backtest.mjs      # season drift, reserve cost and platform economics
-env WATCH_INTERVAL_MIN=15 node src/run.js watch   # continuous oracle (push, close, fees)
+env WATCH_INTERVAL_MIN=15 node src/run.js watch   # continuous oracle (push, close)
 cd ../app && node server.js  # UI on :8080
 ```
 
@@ -163,10 +170,10 @@ Pushing `main` deploys `docs/` through `.github/workflows/pages.yml`. The public
 is read-only: market, player pages, charts and methodology work; portfolio/PnL needs the
 local Node API. Re-run the snapshot after an oracle update.
 
-Tests: `cd contracts && forge test` — 32 tests (17 token economics, 12 registry/oracle,
+Tests: `cd contracts && forge test` — 37 tests (20 token economics, 16 registry/oracle/fees,
 1 invariant suite: reserve covers full redemption, NAV ≤ target, NAV near target when
 funded, holder wealth == reserve, core/token level consistency; runs=20, depth=200).
-Oracle: `cd oracle && node --test test/*.mjs` — 16 tests.
+Oracle: `cd oracle && node --test test/*.mjs` — 18 tests.
 
 ## Self-review findings (fixed during the build)
 
@@ -197,8 +204,10 @@ Oracle: `cd oracle && node --test test/*.mjs` — 16 tests.
 
 ## Known limitations (MVP scope)
 
-- Opponent-rank bonus uses the *current* ranking snapshot applied retroactively across
-  the season (ESPN only exposes current ranks); the oracle refreshes it daily.
+- Seed ratings come from the ranking at the time the oracle first sees a player (ESPN
+  only exposes current ranks), so players already active before launch were seeded from
+  the launch-day ranking. Seeds are then frozen; a late-reported match can still shift
+  the rating sequence of the two players involved.
 - Early-round resolution depends on an event having at least one named round (QF/SF/F)
   before its early matches count; live events score with a small lag.
 - The watch loop only fetches yesterday+today; a longer outage needs a backfill re-run.
@@ -218,7 +227,7 @@ small milestone mint; fees monetize activity and grow the reserve buffer. NAV is
 invariant to fees on both sides (fees are taken from the transfer, not from the reserve).
 
 **Reserve health.** `node src/run.js report` and `/api/stats` track:
-- `totalTarget` — Σ supply × level / 7,500,000 across supplied tokens (the full claim)
+- `totalTarget` — Σ supply × 100 CHZ × level / 7,500.00 across supplied tokens (the full claim)
 - `totalReserve` — Σ reserve balances actually held
 - `fundedRatio` — reserve ÷ target (100% = every holder can exit at full NAV)
 - `outstandingNeed` — the gap the pool must cover

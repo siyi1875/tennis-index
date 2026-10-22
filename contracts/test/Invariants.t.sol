@@ -45,7 +45,7 @@ contract PlayerTokenInvariants is Test {
         _topUpIfLow();
         address a = actors[actorSeed % 3];
         if (amount == 0) amount = 1;
-        if (amount > 1 ether) amount = 1 ether;
+        if (amount > 100 ether) amount = 100 ether; // ~1 token at base (100 CHZ)
         if (amount > a.balance) return;
         vm.prank(a);
         tok.buy{value: amount}(a, 0);

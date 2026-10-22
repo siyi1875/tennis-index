@@ -134,7 +134,7 @@
     <h2 id="simple">0 · The simple version</h2>
     <p><b>The token is a jar.</b> Every player token has its own CHZ jar. When you buy, your CHZ goes into the jar and fresh tokens are printed for you at the fair price. When you sell, your tokens are destroyed and CHZ comes back out of the same jar. There is always real money in the jar behind every token — nobody can be left holding nothing, because your sell doesn't need a buyer on the other side.</p>
     <p><b>Points are a surprise scoreboard.</b> Every player starts the season on 7,500 points. Before each match the engine asks: how likely was this player to win? Win when you were expected to lose, and the level jumps. Win when everyone expected it, and it barely moves. Lose as a heavy favourite, and it falls hard. A Grand Slam final counts more than a small event's first round; sets and games add a small adjustment. A player's <b>level</b> is 7,500 plus their season points.</p>
-    <p><b>The price is the level divided by 7,500.</b> That's the whole formula. A player sitting at 7,500 costs 1 CHZ per token. If they beat expectations, their level rises and so does the price; if they fall short, both fall. So buying a token is a bet that the player will do <i>better than the market expects</i> — not simply that they will win. That is why an underdog can be the better buy: their wins are not priced in yet.</p>
+    <p><b>The price is 100 CHZ × level ÷ 7,500.</b> That's the whole formula. A player sitting at 7,500 costs 100 CHZ per token; you can buy any fraction of a token. If they beat expectations, their level rises and so does the price; if they fall short, both fall. So buying a token is a bet that the player will do <i>better than the market expects</i> — not simply that they will win. That is why an underdog can be the better buy: their wins are not priced in yet.</p>
 
     <h2 id="overview">1 · What this is</h2>
     <p>Each player has an on-chain token (one per player, e.g. <code>ATP-SIN</code> for Jannik Sinner). The token mints and burns at a NAV (net asset value) derived from that player's <b>level</b> — a season surprise score computed by a deterministic engine from official match results. Buy a player you think will beat expectations; sell one you think won't.</p>
@@ -241,7 +241,7 @@ B wins (expected):
 
     <h2 id="nav">5 · From level to NAV</h2>
     <p>A token's NAV (price per token in CHZ) is its level scaled by the base:</p>
-    <div class="formula">NAV = level ÷ 7,500 &nbsp;&nbsp; e.g. level 7,878.85 → NAV 1.0505 CHZ/token
+    <div class="formula">NAV = 100 CHZ × level ÷ 7,500 &nbsp;&nbsp; e.g. level 7,878.85 → NAV 105.05 CHZ/token
 reserve target = supply × NAV</div>
     <p>The core contract keeps every token fully backed: when a level rises, the target reserve rises and the keeper tops the difference up from the core pool; when it falls, the surplus is swept back. <b>Reserve = supply × NAV</b> holds at all times — the <a href="/" style="color:var(--up);font-weight:600">market page</a> shows the live funded ratio.</p>
 
@@ -339,7 +339,7 @@ reserve target = supply × NAV</div>
         <tr><td>Expected score (p)</td><td>Pre-match win probability derived from the two ratings.</td></tr>
         <tr><td>Surprise</td><td><code>1 − p_winner</code>; the size of the level transfer. The loser gives the winner's amount.</td></tr>
         <tr><td>Zero-sum</td><td>Every point a winner gains, the loser gives. A match mints nothing.</td></tr>
-        <tr><td>NAV</td><td>Net asset value per token in CHZ = level ÷ 7,500.</td></tr>
+        <tr><td>NAV</td><td>Net asset value per token in CHZ = 100 × level ÷ 7,500.</td></tr>
         <tr><td>Centi-point (cp)</td><td>Internal integer unit: 1.00 level point = 100 cp.</td></tr>
         <tr><td>Push cap</td><td>On-chain level updates are limited to ±25% per push (<code>maxDeltaBps = 2500</code>).</td></tr>
         <tr><td>Calibration</td><td>Admin-only one-off set of a token's level to computed truth, bypassing the push cap (used at registration).</td></tr>
