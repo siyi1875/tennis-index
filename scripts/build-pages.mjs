@@ -28,6 +28,7 @@ const statsRes = await fetch(statsUrl);
 if (!statsRes.ok) throw new Error(`stats endpoint failed: ${statsRes.status} ${statsUrl}`);
 fs.writeFileSync(path.join(dataDir, "stats.json"), JSON.stringify(await statsRes.json()));
 
+const builtAt = new Date().toISOString();
 const shim = `<script>
 (() => {
   const files = { registry: 1, levels: 1, history: 1, close: 1, stats: 1, pushlog: 1 };
@@ -56,7 +57,7 @@ function buildHtml(src, dst) {
     .replaceAll('href="/docs#', 'href="./docs.html#')
     .replaceAll('href="/"', 'href="./index.html"')
     .replaceAll('src="/', 'src="./');
-  html = html.replace("</head>", `${shim}\n</head>`);
+  html = html.replace("</head>", `<meta name="fspi-build" content="${builtAt}">\n${shim}\n</head>`);
   fs.writeFileSync(path.join(outDir, dst), html);
 }
 
