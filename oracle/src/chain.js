@@ -7,7 +7,10 @@ import { ethers } from "ethers";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const RPC_URL = process.env.SPICY_RPC_URL || "https://spicy-rpc.chiliz.com";
-export const PK = process.env.ORACLE_PRIVATE_KEY || fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
+/// Read lazily so read-only commands (compute, report, close) run without a key.
+export function loadPrivateKey() {
+  return process.env.ORACLE_PRIVATE_KEY || fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
+}
 
 export const DEPLOYMENTS_FILE = path.join(__dirname, "..", "state", "deployments.json");
 export const STATE_FILE = path.join(__dirname, "..", "state", "season-2026.json");
@@ -62,7 +65,7 @@ export const TOKEN_ABI = [
   "function sell(uint256 tokenIn, address to, uint256 minChzOut) returns (uint256)",
 ];
 
-export function getWallet(pk = PK) {
+export function getWallet(pk = loadPrivateKey()) {
   return new ethers.Wallet(pk, new ethers.JsonRpcProvider(RPC_URL, 88882, { staticNetwork: true }));
 }
 

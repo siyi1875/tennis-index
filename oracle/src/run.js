@@ -16,6 +16,7 @@ import { eligibleMatches, applyMatch, levelsForState, newState } from "./compute
 import { buildHistory } from "./history.js";
 import { buildClose } from "./close.js";
 import { saveJson, loadJson, serializeState } from "./state.js";
+import { seededLookup } from "./seeds.js";
 import { getWallet, getCore, TX_OVERRIDES, RPC_URL, DEPLOYMENTS_FILE, saveDeployments } from "./chain.js";
 import { ethers } from "ethers";
 
@@ -27,6 +28,7 @@ const CLOSE_HOUR_UTC = Number(process.env.CLOSE_HOUR_UTC || 9);
 const TOURS = ["atp", "wta"];
 
 const MATCHES_FILE = `matches-${SEASON}.json`;
+const SEEDS_FILE = `seeds-${SEASON}.json`;
 
 async function main() {
   const cmd = process.argv[2] || "help";
@@ -69,8 +71,18 @@ async function loadRankings() {
   return ranks;
 }
 
-function rankLookup(ranks) {
-  return (tour, espnId) => ranks[tour].get(espnId) ?? null;
+/// Rank lookup with frozen seeds (see seeds.js): players already seen keep
+/// their first-sight rank; new players are seeded from the live ranking and
+/// persisted by persist().
+async function frozenLookup() {
+  const seeds = loadJson(SEEDS_FILE, { atp: {}, wta: {} });
+  const s = seededLookup(await loadRankings(), seeds);
+  const persist = () => {
+    if (!s.added()) return;
+    saveJson(SEEDS_FILE, seeds);
+    console.log(`seeds: +${s.added()} players frozen at first-sight rank`);
+  };
+  return { lookup: s.lookup, persist };
 }
 
 async function buildState() {
@@ -81,10 +93,11 @@ async function buildState() {
     .filter((m) => (m.startDate || "").slice(0, 10) >= start)
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "") || String(a.compId).localeCompare(String(b.compId)));
   console.log(`matches: ${raw.length} raw, ${elig.length} eligible since ${start} (singles, main draw, completed)`);
-  const ranks = await loadRankings();
+  const { lookup, persist } = await frozenLookup();
   const st = newState();
   let applied = 0;
-  for (const m of elig) if (applyMatch(st, m, rankLookup(ranks))) applied++;
+  for (const m of elig) if (applyMatch(st, m, lookup)) applied++;
+  persist();
   console.log(`applied ${applied} matches to state (${st.matchIds.size} total, ${st.players.size} players)`);
   saveJson(`state-${SEASON}.json`, serializeState(st));
   return st;
@@ -98,10 +111,11 @@ async function compute() {
     .filter((m) => (m.startDate || "").slice(0, 10) >= start)
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "") || String(a.compId).localeCompare(String(b.compId)));
   console.log(`matches: ${raw.length} raw, ${elig.length} eligible since ${start} (singles, main draw, completed)`);
-  const ranks = await loadRankings();
+  const { lookup, persist } = await frozenLookup();
   const state = newState();
   let applied = 0;
-  for (const m of elig) if (applyMatch(state, m, rankLookup(ranks))) applied++;
+  for (const m of elig) if (applyMatch(state, m, lookup)) applied++;
+  persist();
   console.log(`applied ${applied} matches to state (${state.matchIds.size} total, ${state.players.size} players)`);
   saveJson(`state-${SEASON}.json`, serializeState(state));
   const levels = levelsForState(state);
@@ -111,7 +125,7 @@ async function compute() {
     players: Object.fromEntries([...levels.entries()].map(([id, v]) => [id, v])),
   });
   // retraceable record: daily snapshots + per-player match attribution
-  const { out: history } = buildHistory(elig, rankLookup(ranks));
+  const { out: history } = buildHistory(elig, lookup);
   saveJson(`history-${SEASON}.json`, history);
   console.log(`history: ${history.players ? Object.keys(history.players).length : 0} players, ${history.days.length} daily snapshots`);
   await reportFrom(levels);
@@ -421,8 +435,9 @@ async function close(day) {
   const target = day || fmtDate(new Date(Date.now() - 26 * 3600 * 1000));
   const norm = target.includes("-") ? target : `${target.slice(0, 4)}-${target.slice(4, 6)}-${target.slice(6, 8)}`;
   const matchesData = loadJson(MATCHES_FILE, { byId: {} });
-  const ranks = await loadRankings();
-  const c = buildClose(Object.values(matchesData.byId), ranks, norm, SEASON_START);
+  const { lookup, persist } = await frozenLookup();
+  const c = buildClose(Object.values(matchesData.byId), lookup, norm, SEASON_START);
+  persist();
   const file = loadJson(`close-${SEASON}.json`, { history: [], latest: null });
   file.history = [...(file.history ?? [])].sort((a, b) => a.day.localeCompare(b.day));
   const maxDay = file.history[file.history.length - 1]?.day;

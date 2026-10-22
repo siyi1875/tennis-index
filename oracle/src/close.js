@@ -14,7 +14,8 @@ export function hashLevels(levels) {
 /// Compute the official close for `day` (YYYY-MM-DD): levels from all
 /// eligible completed matches with startDate <= end of `day`, within the
 /// season tracking window (SEASON_START).
-export function buildClose(rawMatches, ranks, day, seasonStart) {
+/// `lookup(tour, id)` returns a player's seed rank (frozen, see seeds.js).
+export function buildClose(rawMatches, lookup, day, seasonStart) {
   const norm = day.includes("-") ? day : `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`;
   const end = `${norm}T23:59:59Z`;
   const start = seasonStart
@@ -24,7 +25,6 @@ export function buildClose(rawMatches, ranks, day, seasonStart) {
     .filter((m) => (m.startDate || "") <= end && (!start || (m.startDate || "") >= `${start}T00:00:00Z`))
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "") || String(a.compId).localeCompare(String(b.compId)));
   const st = newState();
-  const lookup = (tour, id) => ranks?.[tour]?.get?.(id) ?? null;
   for (const m of elig) applyMatch(st, m, lookup);
   const levels = levelsForState(st);
   return {

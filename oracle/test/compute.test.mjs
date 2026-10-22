@@ -188,3 +188,32 @@ test("Round-N without named anchor is skipped", () => {
   const elig = eligibleMatches(raw);
   assert.equal(elig.length, 0);
 });
+
+test("frozen seeds: a ranking update does not move levels of matches already played", async () => {
+  const { seededLookup } = await import("../src/seeds.js");
+  const seeds = { atp: {}, wta: {} };
+  const week1 = { atp: new Map([["a", 1], ["d", 100]]) };
+  const week2 = { atp: new Map([["a", 50], ["d", 2]]) }; // rankings flip
+  const run = (live) => {
+    const st = newState();
+    applyMatch(st, mkMatch(), seededLookup(live, seeds).lookup);
+    return levelsForState(st);
+  };
+  const before = run(week1);
+  const after = run(week2);
+  assert.equal(after.get("a").level2dp, before.get("a").level2dp);
+  assert.equal(after.get("d").level2dp, before.get("d").level2dp);
+  assert.deepEqual(seeds.atp, { a: 1, d: 100 });
+});
+
+test("frozen seeds: a new player is seeded from the live ranking, unranked stays null", async () => {
+  const { seededLookup } = await import("../src/seeds.js");
+  const seeds = { atp: { a: 1 } };
+  const s = seededLookup({ atp: new Map([["a", 40], ["n", 7]]) }, seeds);
+  assert.equal(s.lookup("atp", "a"), 1);
+  assert.equal(s.lookup("atp", "n"), 7);
+  assert.equal(s.lookup("atp", "x"), null);
+  assert.equal(s.added(), 2);
+  // once seeded as unranked, a later live rank does not re-seed
+  assert.equal(seededLookup({ atp: new Map([["x", 3]]) }, seeds).lookup("atp", "x"), null);
+});

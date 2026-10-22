@@ -14,6 +14,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { eligibleMatches, newState, applyMatch, levelsForState, milestoneCpForPlayer } from "../src/compute.js";
+import { seededLookup } from "../src/seeds.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -74,7 +75,10 @@ console.log(`eligible matches: ${eligible.length}`);
 console.log(`date range: ${eligible[0]?.startDate} .. ${eligible[eligible.length - 1]?.startDate}\n`);
 
 const ranks = loadRanks();
-const lookup = (tour, id) => ranks[tour]?.get(id) ?? null;
+// same frozen seeds as the oracle (read-only: the backtest never writes them)
+const seedsFile = path.join(ROOT, "state", `seeds-${SEASON_START.slice(0, 4)}.json`);
+const seeds = fs.existsSync(seedsFile) ? JSON.parse(fs.readFileSync(seedsFile, "utf8")) : { atp: {}, wta: {} };
+const { lookup } = seededLookup(ranks, seeds);
 const state = newState();
 for (const m of eligible) applyMatch(state, m, lookup);
 const levels = levelsForState(state);
