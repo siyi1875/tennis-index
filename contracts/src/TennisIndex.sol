@@ -176,6 +176,13 @@ contract TennisIndex is AccessControl, Pausable {
         for (uint256 i = fromId; i < toId; ++i) out[i - fromId] = _players[i];
     }
 
+    /// @notice haltFrom for a range of player ids (one call for the oracle).
+    function haltFromRange(uint256 fromId, uint256 toId) external view returns (uint64[] memory out) {
+        if (toId > _players.length) toId = _players.length;
+        out = new uint64[](toId - fromId);
+        for (uint256 i = fromId; i < toId; ++i) out[i - fromId] = haltFrom[_players[i].token];
+    }
+
     function levelOf(uint256 id) external view returns (uint128) {
         return _players[id].level;
     }

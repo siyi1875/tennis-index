@@ -425,4 +425,14 @@ contract LiveMatchTest is Test {
         vm.prank(attacker);
         assertGt(tok.buy{value: 100 ether}(attacker, 0), 0);
     }
+
+    function test_haltFromRangeReadsAllPlayers() public {
+        vm.prank(admin);
+        core.addPlayer("WTA-OTH", 2, BASE);
+        _schedule(uint64(block.timestamp + 1 hours));
+        uint64[] memory h = core.haltFromRange(0, 5); // clamps to playerCount
+        assertEq(h.length, 2);
+        assertEq(h[0], block.timestamp + 1 hours);
+        assertEq(h[1], 0);
+    }
 }

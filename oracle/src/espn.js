@@ -141,6 +141,8 @@ export function parseScoreboard(tour, payload) {
           eventName,
           round: rd,
           completed,
+          status: c.status?.type?.name ?? "",
+          timeValid: c.timeValid !== false, // false: ESPN placeholder time, not the order of play
           startDate,
           players,
         });
@@ -148,6 +150,36 @@ export function parseScoreboard(tour, payload) {
     }
   }
   return out;
+}
+
+/// Round labels per event from a scoreboard, with match counts, including
+/// scheduled and TBD-vs-TBD placeholder matches: ESPN lists the later rounds
+/// from the start of an event, which gives the draw structure on day 1.
+/// Returns { "tour|eventId": { label: count } } (singles, main draw).
+export function roundLabels(tour, payload) {
+  const out = {};
+  const singlesSlug = tour === "atp" ? "mens-singles" : "womens-singles";
+  for (const ev of payload?.events ?? []) {
+    const key = `${tour}|${String(ev.id ?? "")}`;
+    for (const g of ev.groupings ?? []) {
+      if (g.grouping?.slug !== singlesSlug) continue;
+      for (const c of g.competitions ?? []) {
+        const lbl = (c.round?.displayName ?? "").trim();
+        if (!lbl || /qualif/i.test(lbl)) continue;
+        (out[key] ??= {})[lbl] = (out[key][lbl] ?? 0) + 1;
+      }
+    }
+  }
+  return out;
+}
+
+/// Merge label counts into `into` (max per label: boards overlap).
+export function mergeLabels(into, add) {
+  for (const [key, ls] of Object.entries(add)) {
+    const t = (into[key] ??= {});
+    for (const [lbl, n] of Object.entries(ls)) t[lbl] = Math.max(t[lbl] ?? 0, n);
+  }
+  return into;
 }
 
 /// Date iterator YYYYMMDD inclusive

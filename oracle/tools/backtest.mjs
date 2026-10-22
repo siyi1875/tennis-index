@@ -66,8 +66,9 @@ function holdPnl(level, spend = 10, feeBps = 100) {
 console.log(`\n=== FSPI Tennis Index — season backtest ===`);
 console.log(`window: ${SEASON_START} .. latest cached match\n`);
 
-const rawAll = Object.values(JSON.parse(fs.readFileSync(path.join(ROOT, "state", "matches-2026.json"), "utf8")).byId);
-const eligible = eligibleMatches(rawAll)
+const matchesJson = JSON.parse(fs.readFileSync(path.join(ROOT, "state", "matches-2026.json"), "utf8"));
+const rawAll = Object.values(matchesJson.byId);
+const eligible = eligibleMatches(rawAll, matchesJson.labels)
   .filter((m) => m.startDate && m.startDate >= SEASON_START)
   .sort((a, b) => a.startDate.localeCompare(b.startDate) || String(a.compId).localeCompare(String(b.compId)));
 

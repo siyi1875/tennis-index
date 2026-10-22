@@ -49,8 +49,12 @@ export function ratingOf(state, id) {
 /// ESPN labels early rounds "Round 1..4" without draw-size context; we resolve
 /// them per event using the event's named rounds (QF/SF/F) as anchors:
 /// deepest "Round N" -> R16, then R32, R64, and R128 vs R96 by match count.
-export function eligibleMatches(rawMatches) {
-  const resolver = resolveEventRounds(rawMatches);
+/// `labels` ({ "tour|eventId": { label: matchCount } }, from the scoreboards
+/// incl. scheduled and TBD matches) gives the full draw structure from day 1,
+/// so early rounds score as soon as they finish instead of waiting days for a
+/// completed QF: until then their results were public but unpriced.
+export function eligibleMatches(rawMatches, labels = {}) {
+  const resolver = resolveEventRounds(rawMatches, labels);
   return rawMatches.filter((m) => {
     if (!m.completed) return false;
     if (isExcluded(m.eventName)) return false;
@@ -68,7 +72,7 @@ export function eligibleMatches(rawMatches) {
   });
 }
 
-function resolveEventRounds(rawMatches) {
+function resolveEventRounds(rawMatches, labels = {}) {
   const groups = new Map();
   for (const m of rawMatches) {
     if (!m.completed) continue;
@@ -82,6 +86,12 @@ function resolveEventRounds(rawMatches) {
       groups.set(key, g);
     }
     g.set(lbl, (g.get(lbl) || 0) + 1);
+  }
+  for (const [key, g] of groups) {
+    for (const [lbl, n] of Object.entries(labels[key] ?? {})) {
+      if (/qualif/i.test(lbl)) continue;
+      g.set(lbl, Math.max(g.get(lbl) || 0, n));
+    }
   }
   const resolved = new Map();
   for (const [key, g] of groups) {

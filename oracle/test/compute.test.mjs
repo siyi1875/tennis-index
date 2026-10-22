@@ -217,3 +217,23 @@ test("frozen seeds: a new player is seeded from the live ranking, unranked stays
   // once seeded as unranked, a later live rank does not re-seed
   assert.equal(seededLookup({ atp: new Map([["x", 3]]) }, seeds).lookup("atp", "x"), null);
 });
+
+test("board round labels resolve early rounds before any QF is completed", () => {
+  const r1 = { ...mkRounds("x")("Round 1", 1), eventId: "ev2" };
+  // only Round 1 has finished: no completed anchor yet
+  assert.equal(eligibleMatches([r1]).length, 0);
+  // the board already lists Round 2, QF, SF and F (scheduled / TBD): 32-draw
+  const labels = { "atp|ev2": { "Round 1": 16, "Round 2": 8, Quarterfinal: 4, Semifinal: 2, Final: 1 } };
+  const elig = eligibleMatches([r1], labels);
+  assert.equal(elig.length, 1);
+  assert.equal(elig[0].resolvedRound, "R32");
+});
+
+test("board labels never change a completed event's resolution", () => {
+  const mk = mkRounds("x");
+  const raw = [mk("Round 1", 1), mk("Round 2", 2), mk("Quarterfinal", 3), mk("Semifinal", 4), mk("Final", 5)];
+  const before = eligibleMatches(raw.map((m) => ({ ...m }))).map((m) => m.resolvedRound);
+  const labels = { "atp|ev": { "Round 1": 16, "Round 2": 8, Quarterfinal: 4, Semifinal: 2, Final: 1 } };
+  const after = eligibleMatches(raw.map((m) => ({ ...m })), labels).map((m) => m.resolvedRound);
+  assert.deepEqual(after, before);
+});
