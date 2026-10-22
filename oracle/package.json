@@ -1,0 +1,21 @@
+{
+  "name": "oracle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "backfill": "node src/run.js backfill",
+    "compute": "node src/run.js compute",
+    "push": "node src/run.js push",
+    "register": "node src/run.js register",
+    "watch": "node src/run.js watch",
+    "backtest": "node tools/backtest.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "ethers": "^6.17.0"
+  }
+}
