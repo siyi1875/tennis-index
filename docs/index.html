@@ -330,7 +330,7 @@
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   }
 </style>
-<meta name="fspi-build" content="2026-10-22T05:20:20.522Z">
+<meta name="fspi-build" content="2026-10-22T05:23:11.127Z">
 <script>
 (() => {
   const files = { registry: 1, levels: 1, history: 1, close: 1, stats: 1, pushlog: 1 };
@@ -539,9 +539,9 @@ async function render() {
   withD.sort((a, b) => (sorters[sortKey] ? sorters[sortKey](a, b) * sortDir : a.level - b.level));
   viewRows = withD;
 
-  // token stats for visible top rows (limit parallel RPC reads)
+  // Paint the table first with cached / level-implied NAV, then fill token stats.
   const visible = withD.slice(0, 40);
-  await Promise.all(visible.map(async (r) => { r.tk = await tokenStats(r.reg?.token); }));
+  for (const r of visible) r.tk = r.reg?.token ? tokenCache.get(r.reg.token) : null;
 
   $("rowCount").textContent = `${withD.length} player${withD.length === 1 ? "" : "s"}`;
   $("emptyMsg").hidden = withD.length > 0;
@@ -553,10 +553,18 @@ async function render() {
       <td class="num">${fmtDelta(r.d1)}</td>
       <td class="num">${fmtDelta(r.d7)}</td>
       <td>${spark(r.series)}</td>
-      <td class="num">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav) : (r.level / 750000).toFixed(4)) : `<span class="tok">—</span>`}</td>
+      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav) : (r.level / 750000).toFixed(4)) : (r.reg?.token ? (r.level / 750000).toFixed(4) : `<span class="tok">—</span>`)}</td>
       <td>${r.reg?.token ? `<span class="tok-pill">LIVE</span>` : `<span class="tok none">soon</span>`}</td>
     </tr>`).join("") + (withD.length > 40
       ? `<tr class="more-row"><td colspan="8">…and ${withD.length - 40} more (search to narrow)</td></tr>` : "");
+
+  Promise.all(visible.map(async (r) => {
+    if (!r.reg?.token || r.tk) return;
+    const tk = await tokenStats(r.reg.token);
+    if (!tk) return;
+    const cell = document.querySelector(`td[data-token="${r.reg.token}"]`);
+    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav) : (r.level / 750000).toFixed(4);
+  })).catch(() => {});
 }
 
 function setTour(t) {
