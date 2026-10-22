@@ -4,7 +4,16 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "openzeppelin-contracts/access/AccessControl.sol";
 import {Pausable} from "openzeppelin-contracts/utils/Pausable.sol";
 import {Clones} from "openzeppelin-contracts/proxy/Clones.sol";
-import {PlayerToken, BASE_LEVEL, MAX_FEE_BPS, targetReserve} from "./PlayerToken.sol";
+import {
+    PlayerToken,
+    BASE_LEVEL,
+    MAX_FEE_BPS,
+    TRADE_OPEN,
+    TRADE_QUEUED,
+    TRADE_PAUSED,
+    TRADE_STALE,
+    targetReserve
+} from "./PlayerToken.sol";
 
 /// @title TennisIndex
 /// @notice Registry of ATP/WTA player performance indexes (FSPI-style) with an
@@ -26,6 +35,18 @@ import {PlayerToken, BASE_LEVEL, MAX_FEE_BPS, targetReserve} from "./PlayerToken
 /// admin can withdraw to the `treasury` address; the rest joins the pool.
 /// The treasury's CHZ sits in this contract's balance but is never used to
 /// fund level rises — only `poolBalance()` is.
+///
+/// Live matches: the oracle halt()s a player shortly before their scheduled
+/// start. While halted, the player's token queues orders instead of filling
+/// them; the oracle's post-match updateLevel() lifts the halt and fills the
+/// queue at the new price in the same transaction, so nobody can trade on a
+/// result the price does not yet reflect. Every oracle transaction is also a
+/// heartbeat: if the oracle goes quiet for `heartbeatMaxAge`, all trading
+/// stops (fail closed) rather than run on a stale price.
+///
+/// Season reset: the level returns to 7,500.00 but the token's price carries
+/// over unchanged (a per-token scale absorbs the difference). No CHZ moves at
+/// the reset, so there is nothing to arbitrage around it.
 contract TennisIndex is AccessControl, Pausable {
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -56,6 +77,14 @@ contract TennisIndex is AccessControl, Pausable {
     address public treasury; // payout address for withdrawTreasury
     uint256 public treasuryBalance; // accrued, not yet withdrawn
 
+    /// Live-match halts, keyed by token. Halted tokens queue their orders.
+    mapping(address => bool) public halted;
+    uint64 public lastHeartbeat; // last oracle transaction
+    uint64 public heartbeatMaxAge = 20 minutes;
+
+    /// Season carry-over price scale per token (wei; 0 means 1e18).
+    mapping(address => uint256) internal _navScale;
+
     error UnknownPlayer(uint256 id);
     error LevelTooLow();
     error DeltaTooBig();
@@ -70,6 +99,11 @@ contract TennisIndex is AccessControl, Pausable {
     event FeeCollected(address indexed token, uint256 amount, uint256 toTreasury);
     event TreasuryWithdrawn(address indexed to, uint256 amount);
     event TreasuryUpdated(address treasury, uint16 shareBps);
+    event Halted(uint256 indexed id);
+    event Resumed(uint256 indexed id);
+    event Heartbeat(uint64 at);
+    event HeartbeatMaxAgeUpdated(uint64 maxAge);
+    event SeasonCarried(uint256 indexed id, uint128 oldLevel, uint256 navScale);
 
     constructor(address admin, address oracle, address tokenImplementation_) {
         require(tokenImplementation_ != address(0), "impl");
@@ -91,6 +125,24 @@ contract TennisIndex is AccessControl, Pausable {
         uint256 toTreasury = (msg.value * treasuryShareBps) / 10_000;
         treasuryBalance += toTreasury;
         emit FeeCollected(msg.sender, msg.value, toTreasury);
+    }
+
+    /// @notice How a token may trade right now (see PlayerToken TRADE_*).
+    function tradeStatus(address token) external view returns (uint8) {
+        if (paused()) return TRADE_PAUSED;
+        if (block.timestamp > uint256(lastHeartbeat) + heartbeatMaxAge) return TRADE_STALE;
+        return halted[token] ? TRADE_QUEUED : TRADE_OPEN;
+    }
+
+    /// @notice Season carry-over scale (1e18 until the token's first reset).
+    function navScaleOf(address token) public view returns (uint256) {
+        uint256 k = _navScale[token];
+        return k == 0 ? 1e18 : k;
+    }
+
+    /// @notice Level-implied price of one token in wei CHZ.
+    function targetNavOf(address token) external view returns (uint256) {
+        return targetReserve(1e18, tokenLevel[token], navScaleOf(token));
     }
 
     /// @notice CHZ available to fund level rises (excludes the treasury).
@@ -126,7 +178,7 @@ contract TennisIndex is AccessControl, Pausable {
         PlayerToken tok = PlayerToken(payable(p.token));
         uint256 s = tok.totalSupply();
         uint256 r = tok.reserveWad();
-        uint256 rTarget = targetReserve(s, p.level);
+        uint256 rTarget = targetReserve(s, p.level, navScaleOf(p.token));
         required = rTarget > r ? rTarget - r : 0;
     }
 
@@ -188,18 +240,26 @@ contract TennisIndex is AccessControl, Pausable {
 
     // ------------------------------ oracle ------------------------------
 
+    /// @notice Push a level. For a halted player (the post-match push) the
+    ///         update interval does not apply, and the halt is lifted and the
+    ///         queue filled at the new price in this same transaction.
     function updateLevel(uint256 id, uint128 newLevel) public onlyRole(ORACLE_ROLE) whenNotPaused {
         if (id >= _players.length) revert UnknownPlayer(id);
         if (newLevel < MIN_LEVEL) revert LevelTooLow();
         Player storage p = _players[id];
-        if (p.lastUpdate != 0 && block.timestamp < p.lastUpdate + minUpdateInterval) revert TooSoon();
+        bool live = halted[p.token];
+        if (!live && p.lastUpdate != 0 && block.timestamp < p.lastUpdate + minUpdateInterval) revert TooSoon();
         uint256 old = p.level;
         uint256 diff = newLevel > old ? newLevel - old : old - newLevel;
         if (diff * 10_000 > old * maxDeltaBps) revert DeltaTooBig();
-        (uint256 funded, uint256 swept) = _settle(id, uint128(old), newLevel);
+        uint256 funded;
+        uint256 swept;
+        if (newLevel != old) (funded, swept) = _settle(id, uint128(old), newLevel);
         p.level = newLevel;
         p.lastUpdate = uint64(block.timestamp);
+        _beat();
         emit LevelUpdated(id, uint128(old), newLevel, funded, swept);
+        if (live) _resume(id);
     }
 
     function updateLevels(uint256[] calldata ids, uint128[] calldata levels) external onlyRole(ORACLE_ROLE) whenNotPaused {
@@ -207,16 +267,66 @@ contract TennisIndex is AccessControl, Pausable {
         for (uint256 i; i < ids.length; ++i) updateLevel(ids[i], levels[i]);
     }
 
-    /// @notice Season reset to the FSPI base level (applied on Jan 1 each year).
+    /// @notice Halt players whose match is about to start (by schedule, before
+    ///         the first point): their tokens queue orders until the result.
+    function halt(uint256[] calldata ids) external onlyRole(ORACLE_ROLE) {
+        for (uint256 i; i < ids.length; ++i) {
+            if (ids[i] >= _players.length) revert UnknownPlayer(ids[i]);
+            address token = _players[ids[i]].token;
+            if (halted[token]) continue;
+            halted[token] = true;
+            emit Halted(ids[i]);
+        }
+        _beat();
+    }
+
+    /// @notice Lift halts with no level change (walkover, cancellation,
+    ///         unchanged level); queued orders fill at the current price.
+    function resume(uint256[] calldata ids) external onlyRole(ORACLE_ROLE) whenNotPaused {
+        for (uint256 i; i < ids.length; ++i) {
+            if (ids[i] >= _players.length) revert UnknownPlayer(ids[i]);
+            _resume(ids[i]);
+        }
+        _beat();
+    }
+
+    /// @notice Oracle liveness signal; any oracle transaction also counts.
+    function heartbeat() external onlyRole(ORACLE_ROLE) {
+        _beat();
+    }
+
+    /// @notice Season reset (Jan 1): levels return to the 7,500.00 base while
+    ///         each token's price carries over unchanged. The token's scale
+    ///         absorbs the change (newScale = scale × oldLevel / base), so the
+    ///         level-implied target and NAV are the same before and after, and
+    ///         no CHZ moves: there is no reset uplift to buy into.
     function seasonReset(uint256[] calldata ids) external onlyRole(ORACLE_ROLE) whenNotPaused {
         for (uint256 i; i < ids.length; ++i) {
+            if (ids[i] >= _players.length) revert UnknownPlayer(ids[i]);
             Player storage p = _players[ids[i]];
             uint128 old = p.level;
-            _settle(ids[i], old, BASE_LEVEL);
+            if (old == BASE_LEVEL) continue;
+            uint256 scale = (navScaleOf(p.token) * old) / BASE_LEVEL;
+            _navScale[p.token] = scale;
             p.level = BASE_LEVEL;
-            p.lastUpdate = uint64(block.timestamp);
+            tokenLevel[p.token] = BASE_LEVEL;
+            emit SeasonCarried(ids[i], old, scale);
         }
+        _beat();
         emit SeasonReset(ids.length);
+    }
+
+    function _beat() internal {
+        lastHeartbeat = uint64(block.timestamp);
+        emit Heartbeat(uint64(block.timestamp));
+    }
+
+    function _resume(uint256 id) internal {
+        PlayerToken tok = PlayerToken(payable(_players[id].token));
+        if (!halted[address(tok)]) return;
+        halted[address(tok)] = false;
+        emit Resumed(id);
+        tok.settleQueue();
     }
 
     /// @dev Keep tokenLevel in sync and settle performance P&L. Returns
@@ -228,7 +338,7 @@ contract TennisIndex is AccessControl, Pausable {
         uint256 s = tok.totalSupply();
         if (s == 0) return (0, 0);
         uint256 r = tok.reserveWad();
-        uint256 rTarget = targetReserve(s, newLevel);
+        uint256 rTarget = targetReserve(s, newLevel, navScaleOf(p.token));
         if (rTarget > r) {
             funded = rTarget - r;
             uint256 bal = poolBalance();
@@ -236,7 +346,7 @@ contract TennisIndex is AccessControl, Pausable {
         } else {
             swept = r - rTarget;
         }
-        tok.applyIndexLevel{value: funded}(oldLevel, newLevel);
+        tok.applyIndexLevel{value: funded}(oldLevel, newLevel, rTarget);
     }
 
     // ------------------------------ admin ------------------------------
@@ -274,6 +384,12 @@ contract TennisIndex is AccessControl, Pausable {
         require(bps >= 100 && bps <= 5_000, "range");
         maxDeltaBps = bps;
         emit ParamsUpdated(maxDeltaBps, minUpdateInterval);
+    }
+
+    function setHeartbeatMaxAge(uint64 seconds_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(seconds_ >= 5 minutes && seconds_ <= 7 days, "range");
+        heartbeatMaxAge = seconds_;
+        emit HeartbeatMaxAgeUpdated(seconds_);
     }
 
     function setMinUpdateInterval(uint64 seconds_) external onlyRole(DEFAULT_ADMIN_ROLE) {

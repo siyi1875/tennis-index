@@ -17,6 +17,8 @@ contract PlayerTokenTest is Test {
 
     function setUp() public {
         core = new TennisIndex(admin, oracle, address(new PlayerToken()));
+        vm.prank(oracle);
+        core.heartbeat(); // trading needs a live oracle
         core.topUp{value: 100000 ether}();
         // NAV-mechanics tests run fee-free; fees are covered explicitly below.
         vm.prank(admin);
@@ -124,6 +126,8 @@ contract PlayerTokenTest is Test {
 
     function test_underfundedCoreDegradesGracefully() public {
         core = new TennisIndex(admin, oracle, address(new PlayerToken()));
+        vm.prank(oracle);
+        core.heartbeat(); // trading needs a live oracle
         core.topUp{value: 5 ether}();
         vm.prank(admin);
         core.setDefaultFees(0, 0);
@@ -179,13 +183,13 @@ contract PlayerTokenTest is Test {
 
     function test_onlyCoreCanApplyLevel() public {
         vm.expectRevert(PlayerToken.OnlyCore.selector);
-        tok.applyIndexLevel(BASE, 800_000);
+        tok.applyIndexLevel(BASE, 800_000, 0);
     }
 
     function test_applyLevelFromCoreWithSupply() public {
         tok.buy{value: 100 ether}(alice, 0);
         vm.prank(address(core));
-        tok.applyIndexLevel(BASE, 900_000); // core passes levels explicitly
+        tok.applyIndexLevel(BASE, 900_000, 120 ether); // core passes levels and target
         // without attached funding nothing moves; core._settle does the funding
         assertEq(tok.navWad(), 100e18);
         assertEq(tok.reserveWad(), 100 ether);
@@ -194,7 +198,7 @@ contract PlayerTokenTest is Test {
     function test_applyLevelWithSupplyZeroRejectsValue() public {
         vm.prank(address(core));
         vm.expectRevert(PlayerToken.ZeroAmount.selector);
-        tok.applyIndexLevel{value: 100 ether}(BASE, 900_000);
+        tok.applyIndexLevel{value: 100 ether}(BASE, 900_000, 0);
     }
 
     function test_onlyCoreCanSetFees() public {
@@ -240,5 +244,70 @@ contract PlayerTokenTest is Test {
             // solvency: paying out the whole supply at NAV must not exceed reserve
             assertLe(s * nav / 1e18, tok.reserveWad());
         }
+    }
+
+    /// A dust first buy rounds its mint down, leaving reserve/supply above
+    /// target (here 1,484 wei backing 14 wei of tokens: NAV 106). Later buyers
+    /// must still pay the level price, not the inflated NAV.
+    function test_dustFirstBuyCannotInflateTheBuyPrice() public {
+        tok.buy{value: 1484}(alice, 0);
+        assertEq(tok.totalSupply(), 14);
+        assertGt(tok.navWad(), 105e18); // reserve/supply is inflated
+        uint256 out = tok.buy{value: 100 ether}(bob, 0);
+        assertEq(out, 1e18); // ...but bob buys at 100 CHZ
+    }
+
+    /// Same for CHZ sent straight to the token: holders own it until the
+    /// next sweep, but buyers never pay for it.
+    function test_donationCannotInflateTheBuyPrice() public {
+        tok.buy{value: 100 ether}(alice, 0);
+        (bool ok,) = address(tok).call{value: 50 ether}("");
+        assertTrue(ok);
+        assertEq(tok.navWad(), 150e18);
+        assertEq(tok.buy{value: 100 ether}(bob, 0), 1e18);
+    }
+
+    function test_buyThatWouldMintNothingReverts() public {
+        vm.prank(admin);
+        core.calibrateLevel(0, 1_000_000);
+        vm.expectRevert(PlayerToken.ZeroAmount.selector);
+        tok.buy{value: 1}(alice, 0);
+    }
+
+    /// Funding floors a dust supply's reserve a few wei under target; that
+    /// must not hand the next large buyer a discount the pool then pays for.
+    function test_dustSupplyRoundingGivesNoBuyDiscount() public {
+        tok.buy{value: 1000 wei}(alice, 0); // 10 wei of tokens
+        vm.prank(admin);
+        core.calibrateLevel(0, 777_777); // target 103.7036 CHZ: reserve floors
+        assertLt(tok.navWad(), core.targetNavOf(address(tok)));
+        uint256 out = tok.buy{value: 1000 ether}(bob, 0);
+        assertEq(out, (1000 ether * 1e18) / core.targetNavOf(address(tok)));
+    }
+
+    function test_underfundedTokenStillBuysAtRealNav() public {
+        core = new TennisIndex(admin, oracle, address(new PlayerToken()));
+        vm.prank(oracle);
+        core.heartbeat();
+        vm.prank(admin);
+        core.setDefaultFees(0, 0);
+        vm.prank(admin);
+        tok = PlayerToken(payable(core.player(core.addPlayer("ATP-U", 1, BASE)).token));
+        tok.buy{value: 100 ether}(alice, 0);
+        vm.prank(admin);
+        core.calibrateLevel(0, 900_000); // empty pool: NAV stays 100, target 120
+        assertEq(tok.navWad(), 100e18);
+        assertEq(tok.buy{value: 100 ether}(bob, 0), 1e18); // real NAV, not target
+    }
+
+    function test_lastSellerTakesTheWholeReserve() public {
+        tok.buy{value: 100 ether}(alice, 0);
+        vm.prank(admin);
+        core.calibrateLevel(0, 777_777); // reserve no longer a round multiple
+        uint256 r = tok.reserveWad();
+        uint256 bal = tok.balanceOf(alice);
+        vm.prank(alice);
+        assertEq(tok.sell(bal, alice, 0), r); // fee-free in this suite
+        assertEq(tok.reserveWad(), 0); // no orphaned dust
     }
 }

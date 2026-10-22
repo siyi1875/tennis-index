@@ -15,6 +15,8 @@ contract TennisIndexTest is Test {
 
     function setUp() public {
         core = new TennisIndex(admin, oracle, address(new PlayerToken()));
+        vm.prank(oracle);
+        core.heartbeat(); // trading needs a live oracle
         deal(user, 100 ether);
     }
 
@@ -100,6 +102,7 @@ contract TennisIndexTest is Test {
         vm.prank(oracle);
         core.seasonReset(ids);
         assertEq(core.levelOf(id), BASE);
+        assertEq(core.tokenLevel(core.player(id).token), BASE);
     }
 
     function test_pauseBlocksUpdates() public {
@@ -124,10 +127,15 @@ contract TennisIndexTest is Test {
     }
 
     function test_priceScalesLinearlyFrom100ChzAtBase() public {
-        PlayerToken tok = PlayerToken(payable(core.player(_add(BASE)).token));
-        assertEq(tok.targetNav(BASE), 100 ether);
-        assertEq(tok.targetNav(779_556), 103.940800 ether); // 7,795.56 -> 103.9408 CHZ
-        assertEq(tok.targetNav(600_000), 80 ether);
+        uint256 id = _add(BASE);
+        address t = core.player(id).token;
+        assertEq(core.targetNavOf(t), 100 ether);
+        vm.startPrank(admin);
+        core.calibrateLevel(id, 779_556);
+        assertEq(core.targetNavOf(t), 103.940800 ether); // 7,795.56 -> 103.9408 CHZ
+        core.calibrateLevel(id, 600_000);
+        assertEq(core.targetNavOf(t), 80 ether);
+        vm.stopPrank();
     }
 
     /// New tokens charge the default 1%/1% from the very first trade: there is

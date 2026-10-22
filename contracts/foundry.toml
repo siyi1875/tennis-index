@@ -12,7 +12,7 @@ fs_permissions = [{ access = "read", path = "./"}]
 spicy = "${SPICY_RPC_URL}"
 
 [invariant]
-runs = 20
+runs = 100
 depth = 200
 shrink_run_limit = 5000
 
