@@ -89,7 +89,10 @@ export const TOKEN_ABI = [
 ];
 
 export function getWallet(pk = loadPrivateKey()) {
-  return new ethers.Wallet(pk, new ethers.JsonRpcProvider(RPC_URL, 88882, { staticNetwork: true }));
+  // the public Spicy RPC is slow at times: wait up to a minute per request
+  const req = new ethers.FetchRequest(RPC_URL);
+  req.timeout = 60_000;
+  return new ethers.Wallet(pk, new ethers.JsonRpcProvider(req, 88882, { staticNetwork: true }));
 }
 
 export function getCore(wallet) {

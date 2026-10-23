@@ -2,8 +2,15 @@
   "network": "chiliz-spicy-testnet",
   "chainId": 88882,
   "rpc": "https://spicy-rpc.chiliz.com",
-  "core": "0xb4b1839683ec021599cf38057005709e42e42da2",
-  "playerTokenImplementation": "0x8fe41d434f719e38a55eb4b45498b2fbcfbbb15b",
-  "deployer": "0x6720Cab7fBC755d51F92187146aF0dD9ca3E8d17",
-  "deployedAt": "2026-10-13"
+  "core": "0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d",
+  "playerTokenImplementation": "0xe36aaf8e32c4426eb1ec7e1fd5debe4379c2ba7b",
+  "deployer": "0xf47629f1ad3377603C45eF721248e2867E6bb672",
+  "deployedAt": "2026-10-23",
+  "previous": [
+    {
+      "core": "0xb4b1839683ec021599cf38057005709e42e42da2",
+      "playerTokenImplementation": "0x8fe41d434f719e38a55eb4b45498b2fbcfbbb15b",
+      "deployedAt": "2026-10-13"
+    }
+  ]
 }
