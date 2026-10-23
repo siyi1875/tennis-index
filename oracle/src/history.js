@@ -31,7 +31,7 @@ export function buildHistory(elig, rankLookup) {
 
   const emitMilestone = (id, eventId, ev, key, date) => {
     const k = `${id}|${eventId}`;
-    if (emitted.has(k)) return;
+    if (emitted.has(k)) return 0;
     const cp = milestoneCpForEvent(ev, key);
     emitted.add(k);
     const dec = key === "TITLE" || key === "FINAL" ? "F" : key === "SF" ? "QF" : "R16";
@@ -42,6 +42,7 @@ export function buildHistory(elig, rankLookup) {
       r: key === "TITLE" ? "F" : key, w: key === "TITLE", cp,
       p: Math.round(p * 10000) / 10000, x: Math.round((1 - p) * 10000) / 10000, lv: levelOf(id),
     });
+    return cp;
   };
 
   const scoreOf = (m, idx) => {
@@ -101,7 +102,10 @@ export function buildHistory(elig, rankLookup) {
       const k = `${id}|${eventId}`;
       if (emitted.has(k)) continue;
       const date = evLastDate.get(eventId) || "9999-12-31";
-      emitMilestone(id, eventId, ev, ev.bestRound, date);
+      const cp = emitMilestone(id, eventId, ev, ev.bestRound, date);
+      // the daily snapshots from that date on were taken before this pass
+      const floor = Math.round(MIN_LEVEL * 100);
+      for (const d of days) if (d.d >= date && d.lv[id] !== undefined) d.lv[id] = Math.max(floor, d.lv[id] + cp);
     }
   }
 

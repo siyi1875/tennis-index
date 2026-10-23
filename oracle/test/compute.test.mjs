@@ -249,3 +249,13 @@ test("daily history records losses below the base level", async () => {
   assert.equal(day.a, levels.get("a").level2dp);
   assert.equal(day.d, levels.get("d").level2dp);
 });
+
+test("daily history includes a pending quarterfinal milestone on the last day", async () => {
+  const { buildHistory } = await import("../src/history.js");
+  // a QF won, event not finished: the SF milestone is still pending
+  const qf = mkMatch({ round: "Quarterfinal", compId: "qf1" });
+  const { out, levels } = buildHistory(eligibleMatches([qf]), mkRanks(new Map([["a", 50], ["d", 1]])));
+  const day = out.days.at(-1).lv;
+  assert.equal(day.a, levels.get("a").level2dp);
+  assert.equal(day.d, levels.get("d").level2dp);
+});

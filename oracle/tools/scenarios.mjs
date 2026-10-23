@@ -40,13 +40,13 @@ export const A = {
   gasPerPlayerMatch: 47_000 + 60_000, // scheduleHalts slot + updateLevel in a batch
   gasQueueSettle: 130_000, // when a batch has orders
   queuedShare: 0.3, // share of player-matches with queued orders
-  offSeasonDays: 42, // per 365: no level moves
+  offSeasonDays: Number(arg("offseason", 42)), // per 365: no level moves (0 for a full-year history)
   offSeasonVolume: 0.3, // volume multiple during the off-season
   rebalanceDays: 7,
 };
 
 // --------------------------------- data ----------------------------------
-const hist = JSON.parse(fs.readFileSync(path.join(ROOT, "state", "history-2026.json"), "utf8"));
+const hist = JSON.parse(fs.readFileSync(arg("history", path.join(ROOT, "state", "history-2026.json")), "utf8"));
 const reg = JSON.parse(fs.readFileSync(path.join(ROOT, "state", "registry.json"), "utf8")).byId;
 const seeds = JSON.parse(fs.readFileSync(path.join(ROOT, "state", "seeds-2026.json"), "utf8"));
 const ids = Object.keys(reg);
@@ -79,7 +79,9 @@ const trailing = (path, t, n) => {
 };
 export const BEHAVIOURS = {
   broad: { label: "Broad: equal weight, all players", w: () => new Float64Array(P).fill(1 / P) },
-  stars: { label: "Fans of stars: top-20 by ranking", w: () => topK(rank.map((r) => -r), 20) },
+  // point in time: highest levels a month into the record (today's ranking would
+  // favour players already known to have risen since)
+  stars: { label: "Fans of stars: top-20 levels at day 30", w: () => topK(lv.map((l) => l[Math.min(30, D - 1)]), 20) },
   momentum: { label: "Chasers: top-20 by last 14 days", w: (p, t) => topK(trailing(p, t, 14), 20) },
   contrarian: { label: "Bargain hunters: bottom-20 by last 14 days", w: (p, t) => topK(trailing(p, t, 14).map((x) => -x), 20) },
   mixed: { label: "Mixed: 40% stars, 30% chasers, 30% broad", mix: { stars: 0.4, momentum: 0.3, broad: 0.3 } },
