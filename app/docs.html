@@ -134,7 +134,7 @@
     <h2 id="simple">0 · The simple version</h2>
     <p><b>The token is a jar.</b> Every player token has its own CHZ jar. When you buy, your CHZ goes into the jar and fresh tokens are printed for you at the fair price. When you sell, your tokens are destroyed and CHZ comes back out of the same jar. There is always real money in the jar behind every token — nobody can be left holding nothing, because your sell doesn't need a buyer on the other side.</p>
     <p><b>Points are a surprise scoreboard.</b> Every player starts the season on 7,500 points. Before each match the engine asks: how likely was this player to win? Win when you were expected to lose, and the level jumps. Win when everyone expected it, and it barely moves. Lose as a heavy favourite, and it falls hard. A Grand Slam final counts more than a small event's first round; sets and games add a small adjustment. A player's <b>level</b> is 7,500 plus their season points.</p>
-    <p><b>The price is the level divided by 7,500.</b> That's the whole formula. A player sitting at 7,500 costs 1 CHZ per token. If they beat expectations, their level rises and so does the price; if they fall short, both fall. So buying a token is a bet that the player will do <i>better than the market expects</i> — not simply that they will win. That is why an underdog can be the better buy: their wins are not priced in yet.</p>
+    <p><b>The price is 100 CHZ × level ÷ 7,500.</b> That's the whole formula. A player sitting at 7,500 costs 100 CHZ per token; you can buy any fraction of a token. If they beat expectations, their level rises and so does the price; if they fall short, both fall. So buying a token is a bet that the player will do <i>better than the market expects</i> — not simply that they will win. That is why an underdog can be the better buy: their wins are not priced in yet.</p>
 
     <h2 id="overview">1 · What this is</h2>
     <p>Each player has an on-chain token (one per player, e.g. <code>ATP-SIN</code> for Jannik Sinner). The token mints and burns at a NAV (net asset value) derived from that player's <b>level</b> — a season surprise score computed by a deterministic engine from official match results. Buy a player you think will beat expectations; sell one you think won't.</p>
@@ -241,7 +241,7 @@ B wins (expected):
 
     <h2 id="nav">5 · From level to NAV</h2>
     <p>A token's NAV (price per token in CHZ) is its level scaled by the base:</p>
-    <div class="formula">NAV = level ÷ 7,500 &nbsp;&nbsp; e.g. level 7,878.85 → NAV 1.0505 CHZ/token
+    <div class="formula">NAV = 100 CHZ × level ÷ 7,500 &nbsp;&nbsp; e.g. level 7,878.85 → NAV 105.05 CHZ/token
 reserve target = supply × NAV</div>
     <p>The core contract keeps every token fully backed: when a level rises, the target reserve rises and the keeper tops the difference up from the core pool; when it falls, the surplus is swept back. <b>Reserve = supply × NAV</b> holds at all times — the <a href="/" style="color:var(--up);font-weight:600">market page</a> shows the live funded ratio.</p>
 
@@ -253,8 +253,10 @@ reserve target = supply × NAV</div>
       <li><b>Slippage guard</b> — the UI computes <code>minOut</code> at 2% below the on-chain NAV and reverts if the level moved against you mid-transaction.</li>
       <li><b>Fee → core reserve</b> — all trading fees accumulate in the core contract as the reserve buffer. It's the venue's only revenue, and it grows with volume, not with your losses.</li>
       <li><b>Zero cold-start</b> — because tokens mint on demand, a brand-new player token is instantly tradeable with zero idle capital. The first buyer sets the pool.</li>
+      <li><b>Live matches</b> — from 15 minutes before a player's scheduled start until their result is on-chain, their token does not fill orders instantly. Buys and sells are <b>queued</b> and all fill together at the <b>post-match price</b>; you then claim the tokens or CHZ. Nobody can trade on a result the price does not yet reflect, in either direction. Queued orders cannot be cancelled. The halt times are posted on-chain ahead of time from the order of play.</li>
+      <li><b>Results feed offline</b> — if the oracle has not reported for an hour, all trading pauses rather than run on a stale price.</li>
     </ul>
-    <div class="note"><b>Season reset.</b> On January 1, levels reset to 7,500.00 and each token's reserve is rebased; any surplus above the base level returns to the core reserve. Consider your positions before the reset — the UI shows a countdown in the last 21 days of the season.</div>
+    <div class="note"><b>Season reset.</b> On January 1 every level returns to 7,500.00 for the new season, but <b>token prices carry over unchanged</b>: each token keeps its price and the new season's results move it from there. No CHZ moves at the reset, so there is nothing to sell before it.</div>
 
     <h2 id="close">7 · The Official Daily Close</h2>
     <p>Intraday level pushes are <b>indicative</b> — they can arrive out of order and are capped at ±25%. Once a day at <b>09:00 UTC</b>, the keeper recomputes <i>all</i> levels from the complete eligible match set and publishes the <b>Official Daily Close</b>: the day, match count, player count and a <b>sha256 hash</b> of the full level table.</p>
@@ -290,7 +292,7 @@ reserve target = supply × NAV</div>
     <h2 id="limits">10 · Limitations</h2>
     <ul>
       <li>Testnet demo: real contracts, real transactions, play-money CHZ from the Spicy faucet.</li>
-      <li>Data latency: ESPN feeds update on their schedule; live in-progress matches are not scored until complete.</li>
+      <li>Data latency: ESPN feeds update on their schedule; a match scores once it is complete. Its players stay in queue mode until then, so the delay costs fill time, never a stale price.</li>
       <li>Single oracle operator — the cap (±25%/push), pausable core and hash-chained closes are the current trust mitigations; a production deployment would add multi-operator oracles and threshold signing.</li>
       <li>Intraday NAV is indicative; only the Official Daily Close is settlement-grade.</li>
       <li><b>Expectation, not strength.</b> The level measures surprise, not absolute quality. A dominant favourite can lose points while winning as expected; an underdog can gain more from one upset than a champion gains from a title defence. The opening rating is calibrated to the ranking snapshot; from then on it moves only through results.</li>
@@ -339,13 +341,14 @@ reserve target = supply × NAV</div>
         <tr><td>Expected score (p)</td><td>Pre-match win probability derived from the two ratings.</td></tr>
         <tr><td>Surprise</td><td><code>1 − p_winner</code>; the size of the level transfer. The loser gives the winner's amount.</td></tr>
         <tr><td>Zero-sum</td><td>Every point a winner gains, the loser gives. A match mints nothing.</td></tr>
-        <tr><td>NAV</td><td>Net asset value per token in CHZ = level ÷ 7,500.</td></tr>
+        <tr><td>NAV</td><td>Net asset value per token in CHZ = 100 × level ÷ 7,500.</td></tr>
         <tr><td>Centi-point (cp)</td><td>Internal integer unit: 1.00 level point = 100 cp.</td></tr>
         <tr><td>Push cap</td><td>On-chain level updates are limited to ±25% per push (<code>maxDeltaBps = 2500</code>).</td></tr>
         <tr><td>Calibration</td><td>Admin-only one-off set of a token's level to computed truth, bypassing the push cap (used at registration).</td></tr>
         <tr><td>Official Daily Close</td><td>Frozen 09:00 UTC settlement levels, sha256-hashed.</td></tr>
         <tr><td>Funded ratio</td><td>Σ actual reserves ÷ Σ required reserves across supplied tokens.</td></tr>
-        <tr><td>Core reserve</td><td>The core's CHZ clearing balance, fed by trading fees; sweeps at season end.</td></tr>
+        <tr><td>Core reserve</td><td>The core's CHZ pool that funds level rises, fed by half of every trading fee and by sweeps when levels fall.</td></tr>
+        <tr><td>Treasury</td><td>The other half of every trading fee: venue revenue, held separately and never used to fund level rises.</td></tr>
       </tbody>
     </table>
   </main>

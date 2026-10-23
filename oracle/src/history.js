@@ -4,6 +4,7 @@
 /// every player seen so far. The replay must reproduce levelsForState exactly:
 /// sum(attribution cp) + milestones == final level cp (asserted at the end).
 import { applyMatch, levelsForState, milestoneCpForEvent, newState } from "./compute.js";
+import { BASE_LEVEL, MIN_LEVEL } from "./tiers.js";
 
 export function buildHistory(elig, rankLookup) {
   const sorted = [...elig].sort(
@@ -19,7 +20,9 @@ export function buildHistory(elig, rankLookup) {
   const days = [];
   let curDay = null;
 
-  const levelOf = (id) => Math.max(750000, 750000 + (cpSum.get(id) || 0));
+  // same rule as levelsForState: base + points, floored at the 100.00 minimum
+  // (not at the base: that hid every player's losses in the daily record)
+  const levelOf = (id) => Math.max(Math.round(MIN_LEVEL * 100), Math.round(BASE_LEVEL * 100) + (cpSum.get(id) || 0));
   const pushRow = (id, row) => {
     let e = events.get(id);
     if (!e) { e = { name: null, tour: null, rows: [] }; events.set(id, e); }
@@ -28,7 +31,7 @@ export function buildHistory(elig, rankLookup) {
 
   const emitMilestone = (id, eventId, ev, key, date) => {
     const k = `${id}|${eventId}`;
-    if (emitted.has(k)) return;
+    if (emitted.has(k)) return 0;
     const cp = milestoneCpForEvent(ev, key);
     emitted.add(k);
     const dec = key === "TITLE" || key === "FINAL" ? "F" : key === "SF" ? "QF" : "R16";
@@ -39,6 +42,7 @@ export function buildHistory(elig, rankLookup) {
       r: key === "TITLE" ? "F" : key, w: key === "TITLE", cp,
       p: Math.round(p * 10000) / 10000, x: Math.round((1 - p) * 10000) / 10000, lv: levelOf(id),
     });
+    return cp;
   };
 
   const scoreOf = (m, idx) => {
@@ -98,7 +102,10 @@ export function buildHistory(elig, rankLookup) {
       const k = `${id}|${eventId}`;
       if (emitted.has(k)) continue;
       const date = evLastDate.get(eventId) || "9999-12-31";
-      emitMilestone(id, eventId, ev, ev.bestRound, date);
+      const cp = emitMilestone(id, eventId, ev, ev.bestRound, date);
+      // the daily snapshots from that date on were taken before this pass
+      const floor = Math.round(MIN_LEVEL * 100);
+      for (const d of days) if (d.d >= date && d.lv[id] !== undefined) d.lv[id] = Math.max(floor, d.lv[id] + cp);
     }
   }
 
@@ -112,6 +119,11 @@ export function buildHistory(elig, rankLookup) {
     }
   }
   if (mismatches) console.error(`history: ${mismatches} players with cp mismatch`);
+  // the daily record must end on the computed levels themselves, not just the same points
+  let levelMismatches = 0;
+  const lastDay = days.at(-1)?.lv ?? {};
+  for (const [id, v] of levels) if (lastDay[id] !== undefined && lastDay[id] !== v.level2dp) levelMismatches++;
+  if (levelMismatches) console.error(`history: ${levelMismatches} players whose last daily level differs from the computed level`);
 
   const out = {
     generatedAt: new Date().toISOString(),

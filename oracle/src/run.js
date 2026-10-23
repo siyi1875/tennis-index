@@ -7,30 +7,36 @@
 //   register            create on-chain player tokens + calibrate levels (admin)
 //   push                push changed levels on-chain (oracle)
 //   rebase              admin: calibrate all levels to computed values (no clamp)
-//   watch               loop: fetch new results, compute, push (default 15 min)
+//   treasury [CHZ|all]  show treasury revenue; with an amount, withdraw it (admin)
+//   watch               loop: fetch results + order of play, compute, push, post halts (default 5 min)
+//   halts               one pass of live-match halts (schedule / resume / heartbeat)
+//   seasonreset         Jan 1: levels back to 7,500.00, token prices carry over (oracle)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchDay, fetchRankings, parseScoreboard, fmtDate, dateRange } from "./espn.js";
+import { fetchDay, fetchRankings, parseScoreboard, roundLabels, mergeLabels, fmtDate, dateRange } from "./espn.js";
 import { eligibleMatches, applyMatch, levelsForState, newState } from "./compute.js";
 import { buildHistory } from "./history.js";
 import { buildClose } from "./close.js";
 import { saveJson, loadJson, serializeState } from "./state.js";
+import { seededLookup } from "./seeds.js";
+import { haltPlan, unscoredPlayers, haltActions } from "./live.js";
 import { getWallet, getCore, TX_OVERRIDES, RPC_URL, DEPLOYMENTS_FILE, saveDeployments } from "./chain.js";
 import { ethers } from "ethers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEASON = process.env.SEASON || "2026";
 const SEASON_START = process.env.SEASON_START || "20260701"; // tracking starts mid-year; SEASON_START=20260101 for full season
-const FEE_BPS = Number(process.env.FEE_BPS || 100); // venue fee on buy+sell -> core prize pool
+const FEE_BPS = Number(process.env.FEE_BPS || 100); // venue fee on buy+sell (`fees` command only; new tokens use the core's on-chain default)
 const CLOSE_HOUR_UTC = Number(process.env.CLOSE_HOUR_UTC || 9);
 const TOURS = ["atp", "wta"];
 
 const MATCHES_FILE = `matches-${SEASON}.json`;
+const SEEDS_FILE = `seeds-${SEASON}.json`;
 
 async function main() {
   const cmd = process.argv[2] || "help";
-  const commands = { backfill, compute, report, register, push, rebase, close, fees, watch, deployinfo, help };
+  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, halts, seasonreset, watch, deployinfo, help };
   if (commands[cmd]) await commands[cmd](process.argv[3]);
   else commands.help();
 }
@@ -44,6 +50,7 @@ async function backfill() {
     for (const d of dateRange(SEASON_START, today)) {
       if (new Date().getTime() % 1 === 0) process.stdout.write(`\r${tour} ${d}   `);
       const payload = await fetchDay(tour, d, { useCache: d !== today });
+      mergeLabels((matches.labels ??= {}), roundLabels(tour, payload));
       const parsed = parseScoreboard(tour, payload);
       for (const m of parsed) {
         if (seen.has(m.compId)) continue;
@@ -69,22 +76,33 @@ async function loadRankings() {
   return ranks;
 }
 
-function rankLookup(ranks) {
-  return (tour, espnId) => ranks[tour].get(espnId) ?? null;
+/// Rank lookup with frozen seeds (see seeds.js): players already seen keep
+/// their first-sight rank; new players are seeded from the live ranking and
+/// persisted by persist().
+async function frozenLookup() {
+  const seeds = loadJson(SEEDS_FILE, { atp: {}, wta: {} });
+  const s = seededLookup(await loadRankings(), seeds);
+  const persist = () => {
+    if (!s.added()) return;
+    saveJson(SEEDS_FILE, seeds);
+    console.log(`seeds: +${s.added()} players frozen at first-sight rank`);
+  };
+  return { lookup: s.lookup, persist };
 }
 
 async function buildState() {
   const matchesData = loadJson(MATCHES_FILE, { byId: {} });
   const raw = Object.values(matchesData.byId);
   const start = SEASON_START.length === 8 ? `${SEASON_START.slice(0, 4)}-${SEASON_START.slice(4, 6)}-${SEASON_START.slice(6, 8)}` : SEASON_START;
-  const elig = eligibleMatches(raw)
+  const elig = eligibleMatches(raw, matchesData.labels)
     .filter((m) => (m.startDate || "").slice(0, 10) >= start)
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "") || String(a.compId).localeCompare(String(b.compId)));
   console.log(`matches: ${raw.length} raw, ${elig.length} eligible since ${start} (singles, main draw, completed)`);
-  const ranks = await loadRankings();
+  const { lookup, persist } = await frozenLookup();
   const st = newState();
   let applied = 0;
-  for (const m of elig) if (applyMatch(st, m, rankLookup(ranks))) applied++;
+  for (const m of elig) if (applyMatch(st, m, lookup)) applied++;
+  persist();
   console.log(`applied ${applied} matches to state (${st.matchIds.size} total, ${st.players.size} players)`);
   saveJson(`state-${SEASON}.json`, serializeState(st));
   return st;
@@ -94,14 +112,15 @@ async function compute() {
   const matchesData = loadJson(MATCHES_FILE, { byId: {} });
   const raw = Object.values(matchesData.byId);
   const start = SEASON_START.length === 8 ? `${SEASON_START.slice(0, 4)}-${SEASON_START.slice(4, 6)}-${SEASON_START.slice(6, 8)}` : SEASON_START;
-  const elig = eligibleMatches(raw)
+  const elig = eligibleMatches(raw, matchesData.labels)
     .filter((m) => (m.startDate || "").slice(0, 10) >= start)
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "") || String(a.compId).localeCompare(String(b.compId)));
   console.log(`matches: ${raw.length} raw, ${elig.length} eligible since ${start} (singles, main draw, completed)`);
-  const ranks = await loadRankings();
+  const { lookup, persist } = await frozenLookup();
   const state = newState();
   let applied = 0;
-  for (const m of elig) if (applyMatch(state, m, rankLookup(ranks))) applied++;
+  for (const m of elig) if (applyMatch(state, m, lookup)) applied++;
+  persist();
   console.log(`applied ${applied} matches to state (${state.matchIds.size} total, ${state.players.size} players)`);
   saveJson(`state-${SEASON}.json`, serializeState(state));
   const levels = levelsForState(state);
@@ -111,10 +130,11 @@ async function compute() {
     players: Object.fromEntries([...levels.entries()].map(([id, v]) => [id, v])),
   });
   // retraceable record: daily snapshots + per-player match attribution
-  const { out: history } = buildHistory(elig, rankLookup(ranks));
+  const { out: history } = buildHistory(elig, lookup);
   saveJson(`history-${SEASON}.json`, history);
   console.log(`history: ${history.players ? Object.keys(history.players).length : 0} players, ${history.days.length} daily snapshots`);
   await reportFrom(levels);
+  return state;
 }
 
 async function reportFrom(levels) {
@@ -227,12 +247,14 @@ async function register() {
       const evs = rc.logs
         .map((l) => { try { return coreW.interface.parseLog(l); } catch { return null; } })
         .filter((x) => x?.name === "PlayerAdded");
-      chunk.forEach((id, k) => {
+      for (const [k, id] of chunk.entries()) {
         const v = levels.get(id);
         const ev = evs.find((e) => e?.args?.symbol === symbols[k]);
         const onChainId = Number(ev?.args?.id ?? (count + i + k));
-        registry.byId[id] = { onChainId, name: v.name, symbol: symbols[k], tour: v.tour, level: v.level2dp, tx: rc.hash };
-      });
+        // the token address is what the UI and server trade against
+        const token = ev?.args?.token ?? (await coreW.player(onChainId)).token;
+        registry.byId[id] = { onChainId, name: v.name, symbol: symbols[k], tour: v.tour, level: v.level2dp, tx: rc.hash, token };
+      }
       saveJson("registry.json", registry);
       console.log(`batch ${Math.floor(i / CHUNK)}: +${evs.length} players (tx ${rc.hash.slice(0, 12)}…, gas ${rc.gasUsed}, ~${(Number(rc.gasUsed) * 2.7e-6).toFixed(2)} CHZ)`);
     } catch (e) {
@@ -245,22 +267,32 @@ async function register() {
   console.log(`registration done: registry size ${Object.keys(registry.byId).length}`);
 }
 
-async function push() {
-  const st = await buildState();
+/// The level the oracle pushes for `computed` given the on-chain level: the
+/// core rejects moves beyond maxDeltaBps (±25%), so clamp to it.
+const PUSH_CAP_BPS = 2500;
+function pushTarget(computed, onchain) {
+  const maxAbs = Math.floor((onchain * PUSH_CAP_BPS) / 10000);
+  return Math.min(Math.max(computed, onchain - maxAbs), onchain + maxAbs);
+}
+
+async function push(stateArg) {
+  const st = typeof stateArg === "object" ? stateArg : await buildState();
   const levels = levelsForState(st);
   const { core, players } = await onchainPlayers();
   const registry = loadJson("registry.json", { byId: {} });
   const byChainId = new Map(players.map((p) => [p.id, p]));
   const updates = [];
   const now = Math.floor(Date.now() / 1000);
-  const MIN_INTERVAL = 30 * 60; // keep in sync with TennisIndex.minUpdateInterval
+  const MIN_INTERVAL = 30 * 60; // keep in sync with TennisIndex.minUpdateInterval (not applied to halted players)
+  const halts = players.length ? (await core.haltFromRange(0, players.length)).map(Number) : [];
   let deferred = 0;
   for (const [espnId, reg] of Object.entries(registry.byId)) {
     const p = byChainId.get(reg.onChainId);
     const lv = levels.get(espnId);
     if (!p || !lv) continue;
     if (lv.level2dp === p.level) continue;
-    if (p.lastUpdate && now < p.lastUpdate + MIN_INTERVAL) { deferred++; continue; }
+    const live = halts[p.id] !== 0 && halts[p.id] <= now; // post-match push: no interval
+    if (!live && p.lastUpdate && now < p.lastUpdate + MIN_INTERVAL) { deferred++; continue; }
     updates.push({ id: p.id, level: lv.level2dp, name: reg.name, old: p.level, delta: (lv.level2dp - p.level) / 100 });
   }
   console.log(`push: ${updates.length} level changes pending${deferred ? `, ${deferred} deferred (<30m since last update)` : ""}`);
@@ -268,15 +300,10 @@ async function push() {
   for (const u of updates.slice(0, 15)) console.log(`  ${u.name}: ${(u.old / 100).toFixed(2)} -> ${(u.level / 100).toFixed(2)} (${u.delta > 0 ? "+" : ""}${u.delta.toFixed(2)})`);
   if (updates.length === 0) return;
   // cap |delta| at maxDeltaBps by clamping (oracle-side) to avoid DeltaTooBig
-  const cap = 2500; // 25%
   const ids = [], lvls = [];
   for (const u of updates) {
-    let target = u.level;
-    const maxAbs = Math.floor((u.old * cap) / 10000);
-    if (target > u.old + maxAbs) target = u.old + maxAbs;
-    if (target < u.old - maxAbs) target = u.old - maxAbs;
     ids.push(u.id);
-    lvls.push(target);
+    lvls.push(pushTarget(u.level, u.old));
   }
   const CHUNK_MAX = 40;
   const GAS_PER_MOVER = 60000n; // measured ~57.5k gas per level in a batched updateLevels
@@ -386,20 +413,20 @@ async function rebase() {
   console.log(`rebase done: ${sent} txs sent`);
 }
 
-/// Turn on venue fees for every token that has supply (fees refill the core
-/// prize pool; unsupplied tokens are skipped — nobody pays fees on them).
-/// Run automatically in watch; `node src/run.js fees` forces it.
+/// Re-price fees on existing tokens to FEE_BPS/FEE_BPS. New tokens already
+/// start with the core's default fees (set on-chain at creation), so this is
+/// only for deliberate changes; it no longer runs in watch.
 async function fees() {
   const wallet = getWallet();
   const coreW = getCore(wallet);
   const { players } = await onchainPlayers();
   const jobs = [];
   for (const p of players) {
-    const tok = new ethers.Contract(p.token, ["function totalSupply() view returns (uint256)", "function buyFeeBps() view returns (uint16)"], wallet);
-    const [s, fee] = await Promise.all([tok.totalSupply(), tok.buyFeeBps()]);
-    if (s > 0n && Number(fee) !== FEE_BPS) jobs.push({ id: p.id, token: p.token });
+    const tok = new ethers.Contract(p.token, ["function buyFeeBps() view returns (uint16)", "function sellFeeBps() view returns (uint16)"], wallet);
+    const [buyFee, sellFee] = await Promise.all([tok.buyFeeBps(), tok.sellFeeBps()]);
+    if (Number(buyFee) !== FEE_BPS || Number(sellFee) !== FEE_BPS) jobs.push({ id: p.id, token: p.token });
   }
-  console.log(`fees: ${jobs.length} supplied tokens need ${FEE_BPS}/${FEE_BPS} bps`);
+  console.log(`fees: ${jobs.length} tokens need ${FEE_BPS}/${FEE_BPS} bps`);
   for (const j of jobs) {
     const tx = await coreW.setPlayerFees(j.id, FEE_BPS, FEE_BPS, TX_OVERRIDES);
     await tx.wait();
@@ -408,11 +435,19 @@ async function fees() {
   console.log("fees done");
 }
 
-let lastFeesRun = 0;
-async function ensureFeesInWatch() {
-  if (Date.now() - lastFeesRun < 60 * 60 * 1000) return;
-  lastFeesRun = Date.now();
-  try { await fees(); } catch (e) { console.error(`ensureFees failed: ${(e.message || "").slice(0, 120)}`); }
+/// Show treasury revenue; `treasury <CHZ|all>` withdraws it to the treasury
+/// address (admin). The pool is never touched.
+async function treasury(amount) {
+  const wallet = getWallet();
+  const coreW = getCore(wallet);
+  const [to, share, bal, pool] = await Promise.all([coreW.treasury(), coreW.treasuryShareBps(), coreW.treasuryBalance(), coreW.poolBalance()]);
+  console.log(`treasury ${to}: ${ethers.formatEther(bal)} CHZ withdrawable (share ${Number(share) / 100}% of fees); pool ${ethers.formatEther(pool)} CHZ`);
+  if (!amount) return;
+  const wei = amount === "all" ? bal : ethers.parseEther(amount);
+  if (wei === 0n) return;
+  const tx = await coreW.withdrawTreasury(wei, TX_OVERRIDES);
+  await tx.wait();
+  console.log(`withdrew ${ethers.formatEther(wei)} CHZ to ${to} (tx ${tx.hash.slice(0, 12)}…)`);
 }
 
 /// Publish the Official Daily Close for `day` (default: yesterday).
@@ -421,8 +456,9 @@ async function close(day) {
   const target = day || fmtDate(new Date(Date.now() - 26 * 3600 * 1000));
   const norm = target.includes("-") ? target : `${target.slice(0, 4)}-${target.slice(4, 6)}-${target.slice(6, 8)}`;
   const matchesData = loadJson(MATCHES_FILE, { byId: {} });
-  const ranks = await loadRankings();
-  const c = buildClose(Object.values(matchesData.byId), ranks, norm, SEASON_START);
+  const { lookup, persist } = await frozenLookup();
+  const c = buildClose(Object.values(matchesData.byId), lookup, norm, SEASON_START, matchesData.labels);
+  persist();
   const file = loadJson(`close-${SEASON}.json`, { history: [], latest: null });
   file.history = [...(file.history ?? [])].sort((a, b) => a.day.localeCompare(b.day));
   const maxDay = file.history[file.history.length - 1]?.day;
@@ -457,15 +493,17 @@ async function maybePublishClose() {
 }
 
 async function watch() {
-  const intervalMin = Number(process.env.WATCH_INTERVAL_MIN || 15);
+  // Halts are posted ahead and hold until the post-match push, so the
+  // interval only sets how soon queued orders fill after a match.
+  const intervalMin = Number(process.env.WATCH_INTERVAL_MIN || 5);
   console.log(`watch mode: every ${intervalMin} min`);
   for (;;) {
     try {
-      await incrementalFetch();
-      await compute();
-      await push();
+      const schedule = await incrementalFetch();
+      const state = await compute();
+      await push(state);
+      await halts(state, schedule);
       await maybePublishClose();
-      await ensureFeesInWatch();
       await maybeClaimFaucet();
     } catch (e) {
       console.error(`watch iteration failed: ${e.message?.slice(0, 300)}`);
@@ -474,16 +512,23 @@ async function watch() {
   }
 }
 
+/// Store newly completed matches; return every parsed match from yesterday's,
+/// today's and tomorrow's scoreboards (incl. scheduled and live ones) for the
+/// order of play. All fetched fresh: a cached board would freeze a match in
+/// its last-seen state (e.g. "in progress" past midnight).
 async function incrementalFetch() {
   const matchesData = loadJson(MATCHES_FILE, { byId: {} });
   const seen = new Set(Object.keys(matchesData.byId));
-  const yesterday = fmtDate(new Date(Date.now() - 26 * 3600 * 1000));
-  const today = fmtDate(new Date());
+  const day = (offsetH) => fmtDate(new Date(Date.now() + offsetH * 3600 * 1000));
+  const days = [...new Set([day(-26), day(0), day(24)])];
+  const schedule = new Map();
   let added = 0;
   for (const tour of TOURS) {
-    for (const d of [yesterday, today]) {
-      const payload = await fetchDay(tour, d, { useCache: d === yesterday });
+    for (const d of days) {
+      const payload = await fetchDay(tour, d, { useCache: false });
+      mergeLabels((matchesData.labels ??= {}), roundLabels(tour, payload));
       for (const m of parseScoreboard(tour, payload)) {
+        schedule.set(m.compId, m); // boards overlap: keep one copy per match
         if (seen.has(m.compId) || !m.completed) continue;
         matchesData.byId[m.compId] = m;
         seen.add(m.compId);
@@ -491,8 +536,73 @@ async function incrementalFetch() {
       }
     }
   }
-  if (added) saveJson(MATCHES_FILE, matchesData);
-  console.log(`incremental fetch: +${added} matches`);
+  saveJson(MATCHES_FILE, matchesData); // new matches and/or round labels
+  console.log(`incremental fetch: +${added} matches, ${schedule.size} on the boards`);
+  return [...schedule.values()];
+}
+
+/// One pass of live-match halts: post the order of play, release players
+/// whose result is priced, and keep the heartbeat alive. Resumes go first so
+/// a released player can be re-scheduled for their next match in this pass.
+async function halts(stateArg, scheduleArg) {
+  const state = typeof stateArg === "object" ? stateArg : await buildState();
+  const schedule = Array.isArray(scheduleArg) ? scheduleArg : await incrementalFetch();
+  const levels = levelsForState(state);
+  const { core, players } = await onchainPlayers();
+  const haltFroms = players.length ? (await core.haltFromRange(0, players.length)).map(Number) : [];
+  const registry = loadJson("registry.json", { byId: {} });
+  const rows = [];
+  for (const [espnId, reg] of Object.entries(registry.byId)) {
+    const p = players[reg.onChainId];
+    if (!p) continue;
+    const computed = levels.get(espnId)?.level2dp ?? p.level;
+    rows.push({ espnId, chainId: p.id, haltFrom: haltFroms[p.id], level: p.level, target: pushTarget(computed, p.level) });
+  }
+  const start = SEASON_START.length === 8 ? `${SEASON_START.slice(0, 4)}-${SEASON_START.slice(4, 6)}-${SEASON_START.slice(6, 8)}` : SEASON_START;
+  const now = Date.now();
+  const plan = haltPlan(schedule, now);
+  const unscored = unscoredPlayers(schedule, state.matchIds, start);
+  const { schedule: toSchedule, resume } = haltActions(rows, plan, unscored, now);
+  const live = rows.filter((r) => r.haltFrom !== 0 && r.haltFrom * 1000 <= now).length;
+  console.log(`halts: ${live} live, ${toSchedule.length} to schedule, ${resume.length} to release, ${unscored.size} players with unscored results`);
+  const coreW = getCore(getWallet());
+  let sent = 0;
+  const CHUNK = 40;
+  for (let i = 0; i < resume.length; i += CHUNK) {
+    const tx = await coreW.resume(resume.slice(i, i + CHUNK), TX_OVERRIDES);
+    await tx.wait();
+    sent++;
+  }
+  for (let i = 0; i < toSchedule.length; i += CHUNK) {
+    const part = toSchedule.slice(i, i + CHUNK);
+    const tx = await coreW.scheduleHalts(part.map((x) => x.chainId), part.map((x) => x.from), TX_OVERRIDES);
+    await tx.wait();
+    sent++;
+  }
+  // every oracle tx is a heartbeat; send one only when idle for half the window
+  if (!sent) {
+    const [last, maxAge] = (await Promise.all([core.lastHeartbeat(), core.heartbeatMaxAge()])).map(Number);
+    if (now / 1000 > last + maxAge / 2) {
+      const tx = await coreW.heartbeat(TX_OVERRIDES);
+      await tx.wait();
+      console.log("heartbeat sent");
+    }
+  }
+}
+
+/// Jan 1: return every registered player's level to 7,500.00. Token prices
+/// carry over on-chain (no CHZ moves). Run before switching SEASON /
+/// SEASON_START to the new year.
+async function seasonreset() {
+  const { players } = await onchainPlayers();
+  const ids = players.filter((p) => p.level !== 750000).map((p) => p.id);
+  console.log(`season reset: ${ids.length}/${players.length} players off base`);
+  const coreW = getCore(getWallet());
+  for (let i = 0; i < ids.length; i += 40) {
+    const tx = await coreW.seasonReset(ids.slice(i, i + 40), TX_OVERRIDES);
+    const rc = await tx.wait();
+    console.log(`reset ${Math.min(i + 40, ids.length)}/${ids.length} (tx ${rc.hash.slice(0, 12)}…, gas ${rc.gasUsed})`);
+  }
 }
 
 async function deployinfo() {
@@ -501,7 +611,7 @@ async function deployinfo() {
 }
 
 async function help() {
-  console.log(`commands: backfill compute report register push rebase close fees watch deployinfo`);
+  console.log(`commands: backfill compute report register push rebase close fees treasury halts seasonreset watch deployinfo`);
 }
 
 main().catch((e) => {

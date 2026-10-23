@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 interface ITennisIndexCore {
-    function paused() external view returns (bool);
-    function tokenLevel(address token) external view returns (uint128);
+    /// TRADE_OPEN / TRADE_QUEUED / TRADE_PAUSED / TRADE_STALE (PlayerToken.sol)
+    function tradeStatus(address token) external view returns (uint8);
+    function targetNavOf(address token) external view returns (uint256);
+    function collectFee() external payable;
 }

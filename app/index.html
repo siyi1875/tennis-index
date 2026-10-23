@@ -251,6 +251,13 @@
   .conn b { color: var(--ink); font-family: var(--mono); font-weight: 600; }
   .oref { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-3); padding: 5px 0; border-bottom: 1px dashed var(--line); }
   .oref b { font-family: var(--mono); color: var(--ink-2); font-weight: 600; }
+  .livebar { font-size: 12px; line-height: 1.5; border-radius: var(--r-sm); padding: 8px 10px; margin: 0 0 12px; background: var(--sunk); color: var(--ink-2); }
+  .livebar.live { background: var(--down-soft); color: var(--down); }
+  .livebar.live b::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--down); margin-right: 6px; vertical-align: 1px; }
+  .livebar.soon { background: var(--gold-soft); color: var(--gold); }
+  .qorders { margin-top: 10px; }
+  .qorder { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .qorder .mono { font-family: var(--mono); }
   .feenote { font-size: 11px; color: var(--ink-3); margin-top: 10px; display: flex; justify-content: space-between; gap: 8px; }
 
   footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; line-height: 1.7; display: flex; gap: 24px; justify-content: space-between; flex-wrap: wrap; }
@@ -414,7 +421,11 @@
 const SEL = {
   navWad: "0xd09074c0", totalSupply: "0x18160ddd", reserveWad: "0xe9669822",
   buy: "0xcce7ec13", sell: "0x67cdf6c9", balanceOf: "0x70a08231",
+  // live-match queue
+  tradeStatus: "0xc229550c", haltFrom: "0xfb3e7511", epoch: "0x900cf0cf",
+  orders: "0xbc908963", claim: "0x1790c562",
 };
+const CORE = "0xb4b1839683ec021599cf38057005709e42e42da2"; // TennisIndex core (oracle/state/deployments.json)
 const RPC = "https://spicy-rpc.chiliz.com";
 const CHAIN_ID_HEX = "0x15b32"; // 88882 = Chiliz Spicy testnet
 const CHAIN_NAME = "Chiliz Spicy Testnet";
@@ -532,7 +543,7 @@ async function render() {
       <td class="num">${fmtDelta(r.d1)}</td>
       <td class="num">${fmtDelta(r.d7)}</td>
       <td>${spark(r.series)}</td>
-      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav) : (r.level / 750000).toFixed(4)) : (r.reg?.token ? (r.level / 750000).toFixed(4) : `<span class="tok">—</span>`)}</td>
+      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav, 2) : (r.level / 7500).toFixed(2)) : (r.reg?.token ? (r.level / 7500).toFixed(2) : `<span class="tok">—</span>`)}</td>
       <td>${r.reg?.token ? `<span class="tok-pill">LIVE</span>` : `<span class="tok none">soon</span>`}</td>
     </tr>`).join("") + (withD.length > 40
       ? `<tr class="more-row"><td colspan="8">…and ${withD.length - 40} more (search to narrow)</td></tr>` : "");
@@ -542,7 +553,7 @@ async function render() {
     const tk = await tokenStats(r.reg.token);
     if (!tk) return;
     const cell = document.querySelector(`td[data-token="${r.reg.token}"]`);
-    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav) : (r.level / 750000).toFixed(4);
+    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav, 2) : (r.level / 7500).toFixed(2);
   })).catch(() => {});
 }
 
@@ -663,6 +674,7 @@ function tokenPanelHtml(reg) {
       </div>
       <div class="navbig" id="navBig">— <small>NAV / token</small></div>
       <div class="navsub" id="navSub">loading token state…</div>
+      <div class="livebar" id="liveBar" hidden></div>
       <div class="side-toggle">
         <button id="sideBuy" class="buy on" onclick="setSide('buy')">Buy</button>
         <button id="sideSell" class="sell" onclick="setSide('sell')">Sell</button>
@@ -672,6 +684,7 @@ function tokenPanelHtml(reg) {
         <button class="btn" id="orderBtn" onclick="submitOrder('${reg.token}')">Buy</button>
       </div>
       <div class="msg" id="tokMsg"></div>
+      <div class="qorders" id="myOrders"></div>
       <div class="oref"><span>wallet</span><b id="walletBal">—</b></div>
       <div class="oref"><span>holdings</span><b id="holdBal">—</b></div>
       <div class="feenote"><span>Fee 1% per side → core reserve</span><span>Slippage guard 2%</span></div>
@@ -679,14 +692,95 @@ function tokenPanelHtml(reg) {
 }
 
 let orderSide = "buy";
-function setSide(s) {
+let tokenQueued = false; // the open token's player is in a live match: orders queue
+function setSide(s, keepAmount = false) {
   orderSide = s;
   $("sideBuy").classList.toggle("on", s === "buy");
   $("sideSell").classList.toggle("on", s === "sell");
   const inp = $("orderAmt"), btn = $("orderBtn");
-  if (s === "buy") { inp.placeholder = "CHZ to spend"; inp.setAttribute("aria-label", "CHZ to spend"); btn.textContent = "Buy"; btn.className = "btn"; }
-  else { inp.placeholder = "Tokens to sell"; inp.setAttribute("aria-label", "Tokens to sell"); btn.textContent = "Sell"; btn.className = "btn sec"; }
-  inp.value = "";
+  const verb = s === "buy" ? "Buy" : "Sell";
+  if (s === "buy") { inp.placeholder = "CHZ to spend"; inp.setAttribute("aria-label", "CHZ to spend"); btn.className = "btn"; }
+  else { inp.placeholder = "Tokens to sell"; inp.setAttribute("aria-label", "Tokens to sell"); btn.className = "btn sec"; }
+  btn.textContent = tokenQueued ? `Queue ${verb.toLowerCase()}` : verb;
+  if (!keepAmount) inp.value = "";
+}
+
+/// Live-match state from the core: 0 open, 1 live (queue), 2 paused, 3 oracle offline.
+async function renderLiveBar(token) {
+  const bar = $("liveBar");
+  if (!bar) return;
+  let st = 0, from = 0;
+  try {
+    const pad = token.slice(2).toLowerCase().padStart(64, "0");
+    const [a, b] = await Promise.all([ethCall(CORE, SEL.tradeStatus + pad), ethCall(CORE, SEL.haltFrom + pad)]);
+    st = Number(BigInt(a));
+    from = Number(BigInt(b));
+  } catch { bar.hidden = true; return; } // pre-queue core: no live state to show
+  const nowS = Date.now() / 1000;
+  const hhmm = (t) => new Date(t * 1000).toISOString().slice(11, 16) + " UTC";
+  tokenQueued = st === 1;
+  bar.className = "livebar";
+  bar.hidden = false;
+  if (st === 1) {
+    bar.classList.add("live");
+    bar.innerHTML = `<b>Live match.</b> Orders queue and fill at the post-match price once the result posts. Queued orders can't be cancelled.`;
+  } else if (st === 2) {
+    bar.innerHTML = `<b>Trading paused.</b>`;
+  } else if (st === 3) {
+    bar.innerHTML = `<b>Trading paused:</b> the results feed is offline. Trading resumes when it reconnects.`;
+  } else if (from > nowS) {
+    bar.classList.add("soon");
+    bar.innerHTML = `<b>Match today.</b> From ${hhmm(from)} orders queue until the result posts.`;
+  } else {
+    bar.hidden = true;
+  }
+  setSide(orderSide, true);
+}
+
+/// The connected wallet's queued orders on this token (recent batches).
+async function renderMyOrders(token, acc) {
+  const box = $("myOrders");
+  if (!box) return;
+  let html = "";
+  try {
+    const e = Number(BigInt(await ethCall(token, SEL.epoch)));
+    const epochs = [];
+    for (let k = Math.max(0, e - 9); k <= e; k++) epochs.push(k);
+    const rows = await Promise.all(epochs.map(async (k) => {
+      const out = await ethCall(token, SEL.orders + k.toString(16).padStart(64, "0") + acc.slice(2).toLowerCase().padStart(64, "0"));
+      const w = out.slice(2).match(/.{64}/g).map((x) => BigInt("0x" + x));
+      return { epoch: k, buyChz: w[1], sellTokens: w[2] };
+    }));
+    for (const r of rows) {
+      if (r.buyChz === 0n && r.sellTokens === 0n) continue;
+      const what = [r.buyChz > 0n ? `buy ${eth(r.buyChz, 4)} CHZ` : "", r.sellTokens > 0n ? `sell ${eth(r.sellTokens, 6)} tokens` : ""].filter(Boolean).join(" + ");
+      const ready = r.epoch < e; // batches below the open one are settled
+      html += `<div class="qorder"><span>Queued: <span class="mono">${what}</span></span>${ready
+        ? `<button class="ghost" onclick="claimOrder('${token}', ${r.epoch})">Claim fill</button>`
+        : `<span>fills after the result</span>`}</div>`;
+    }
+  } catch {}
+  box.innerHTML = html;
+}
+
+async function claimOrder(token, epoch) {
+  const msg = $("tokMsg");
+  try {
+    const acc = await ensureChain();
+    const data = SEL.claim + epoch.toString(16).padStart(64, "0") + acc.slice(2).toLowerCase().padStart(64, "0");
+    const tx = await pv().request({ method: "eth_sendTransaction", params: [{ from: acc, to: token, value: "0x0", data }] });
+    if (msg) { msg.className = "msg ok"; msg.textContent = `Claim sent: ${tx.slice(0, 10)}…`; }
+    else toast(`Claim sent: ${tx.slice(0, 10)}…`);
+    tokenCache.delete(token);
+    setTimeout(async () => {
+      await updateWalletUi();
+      if (view === "profile") await loadPortfolio();
+      else if ($("myOrders")) refreshTokenPanel({ token });
+    }, 12000);
+  } catch (e) {
+    const t = (e.message ?? "failed").slice(0, 160);
+    if (msg) { msg.className = "msg err"; msg.textContent = t; } else toast(t, "err");
+  }
 }
 
 function setAmt(v) {
@@ -740,6 +834,7 @@ async function refreshTokenPanel(reg) {
     if (stats) stats.textContent = `supply ${eth(s, 4)} · reserve ${eth(BigInt(res), 2)} CHZ`;
     const navBig = $("navBig");
     if (navBig) navBig.innerHTML = `${eth(n, 4)} <small>NAV / token</small>`;
+    await renderLiveBar(reg.token);
     const navSub = $("navSub");
     if (navSub) navSub.textContent = s > 0n
       ? `NAV = reserve ÷ supply · price pins to level-implied value`
@@ -756,7 +851,8 @@ async function refreshTokenPanel(reg) {
             ethCall(reg.token, SEL.balanceOf + acc.slice(2).toLowerCase().padStart(64, "0")),
           ]);
           $("walletBal").textContent = eth(BigInt(bal), 3) + " CHZ";
-          $("holdBal").textContent = eth(BigInt(hold), 4) + " " + reg.symbol;
+          $("holdBal").textContent = eth(BigInt(hold), 6) + " " + reg.symbol;
+          await renderMyOrders(reg.token, acc);
         }
       } catch {}
     }
@@ -764,9 +860,11 @@ async function refreshTokenPanel(reg) {
 }
 
 function toWei(amount) {
-  const v = Number(amount);
-  if (!isFinite(v) || v <= 0) return null;
-  return BigInt(Math.round(v * 1e18));
+  // exact decimal -> wei (Number() would round 18-decimal amounts)
+  const m = String(amount).trim().match(/^(\d*)(?:\.(\d*))?$/);
+  if (!m || (!m[1] && !m[2])) return null;
+  const v = BigInt(m[1] || "0") * 10n ** 18n + BigInt(((m[2] || "") + "0".repeat(18)).slice(0, 18));
+  return v > 0n ? v : null;
 }
 function toU256(hexStr) { return hexStr.slice(2).padStart(64, "0"); }
 
@@ -784,7 +882,10 @@ async function doBuy(token) {
       method: "eth_sendTransaction",
       params: [{ from: acc, to: token, value: "0x" + value.toString(16), data }],
     });
-    msg.className = "msg ok"; msg.textContent = `Sent tx ${tx.slice(0, 10)}… — NAV pins near ${eth(nav, 4)} CHZ per token.`;
+    msg.className = "msg ok";
+    msg.textContent = tokenQueued
+      ? `Queued (tx ${tx.slice(0, 10)}…). It fills at the post-match price; claim it here after the result posts.`
+      : `Sent tx ${tx.slice(0, 10)}… — NAV pins near ${eth(nav, 2)} CHZ per token.`;
     tokenCache.delete(token);
     await updateWalletUi();
     if (view === "profile") await loadPortfolio();
@@ -806,7 +907,10 @@ async function doSell(token) {
       method: "eth_sendTransaction",
       params: [{ from: acc, to: token, value: "0x0", data }],
     });
-    msg.className = "msg ok"; msg.textContent = `Sell sent: ${tx.slice(0, 10)}…`;
+    msg.className = "msg ok";
+    msg.textContent = tokenQueued
+      ? `Sell queued (tx ${tx.slice(0, 10)}…). It fills at the post-match price; claim the CHZ here after the result posts.`
+      : `Sell sent: ${tx.slice(0, 10)}…`;
     tokenCache.delete(token);
     await updateWalletUi();
     if (view === "profile") await loadPortfolio();
@@ -817,7 +921,7 @@ async function doSell(token) {
 async function loadStats() {
   try {
     const [b, stats, closeData] = await Promise.all([
-      rpc("eth_getBalance", ["0xb4b1839683ec021599cf38057005709e42e42da2", "latest"]).catch(() => "0x0"),
+      rpc("eth_getBalance", [CORE, "latest"]).catch(() => "0x0"),
       fetch("/api/stats").then((x) => x.json()).catch(() => null),
       fetch("/api/close").then((x) => x.json()).catch(() => null),
     ]);
@@ -833,7 +937,8 @@ async function loadStats() {
     if (stats && !stats.error) {
       const ratio = stats.fundedRatio ?? 1;
       const cls = ratio >= 0.999 ? "acc" : ratio >= 0.9 ? "" : "down";
-      cells.push({ k: "Core reserve", v: `${(Number(stats.coreBalance) / 1e18).toFixed(2)} CHZ`, acc: false });
+      cells.push({ k: "Core reserve", v: `${(Number(stats.poolBalance ?? stats.coreBalance) / 1e18).toFixed(2)} CHZ`, acc: false });
+      cells.push({ k: "Treasury", v: `${(Number(stats.treasuryBalance ?? 0) / 1e18).toFixed(2)} CHZ` });
       cells.push({ k: "Reserve funded", v: `${(ratio * 100).toFixed(1)}%`, cls });
       cells.push({ k: "Open claim", v: `${(Number(stats.outstandingNeed) / 1e18).toFixed(3)} CHZ`, cls: ratio < 0.999 ? "down" : "" });
     } else {
@@ -844,7 +949,7 @@ async function loadStats() {
       $("seasonBadge").textContent = `Official close ${closeData.latest.day} · ${closeData.latest.hash.slice(0, 8)}`;
       $("seasonBadge").title = `Settlement levels for ${closeData.latest.day} — sha256 ${closeData.latest.hash}. Intraday values are indicative; the close is the authoritative print.`;
     }
-    // season-end warning (levels reset to 7,500.00 on Jan 1; surplus sweeps to pool)
+    // season-end notice (levels reset to 7,500.00 on Jan 1; token prices carry over)
     const now = new Date();
     const seasonEnd = new Date(`${now.getUTCFullYear()}-12-31T23:59:59Z`);
     const daysLeft = Math.ceil((seasonEnd - now) / 86400000);
@@ -852,7 +957,7 @@ async function loadStats() {
       const b = document.createElement("div");
       b.id = "seasonBanner";
       b.style.cssText = "background:var(--gold-soft);border:1px solid var(--gold);color:var(--gold);border-radius:12px;padding:12px 18px;font-size:13px;margin-bottom:14px;line-height:1.6";
-      b.innerHTML = `<b>Season ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.</b> Levels reset to 7,500.00 on Jan 1 and reserve surplus above the base level returns to the core reserve. Consider your positions before the reset.`;
+      b.innerHTML = `<b>Season ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.</b> On Jan 1 every level resets to 7,500.00 for the new season. Token prices carry over unchanged, so there is no need to sell before the reset.`;
       $("stats").before(b);
     }
   } catch {}
@@ -909,7 +1014,7 @@ function renderProfile() {
   const rows = holdings.map((h) => `
     <tr class="row" onclick="select('${h.espnId ?? ""}');showMarket()">
       <td class="nm">${esc(h.symbol)} <span class="tok">${esc(h.name)}</span></td>
-      <td class="num">${eth(BigInt(h.balance), 4)}</td>
+      <td class="num">${eth(BigInt(h.balance), 6)}</td>
       <td class="num">${eth(BigInt(h.nav), 4)}</td>
       <td class="num">${eth(BigInt(h.value), 4)}</td>
       <td class="num">${eth(BigInt(h.invested), 4)}</td>
@@ -920,7 +1025,14 @@ function renderProfile() {
   const fills = (d.fills ?? []).map((f) => {
     const ts = f.ts ? new Date(f.ts * 1000).toISOString().slice(0, 10) : "";
     const px = Number(BigInt(f.nav)) / 1e18;
-    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 4)} tok @ ${px.toFixed(4)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
+    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 6)} tok @ ${px.toFixed(2)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
+  }).join("");
+  // orders placed during a live match: filled at the post-match price, then claimed
+  const queued = (d.pending ?? []).map((o) => {
+    const what = [BigInt(o.buyChz) > 0n ? `buy ${eth(BigInt(o.buyChz), 4)} CHZ` : "", BigInt(o.sellTokens) > 0n ? `sell ${eth(BigInt(o.sellTokens), 6)} tokens` : ""].filter(Boolean).join(" + ");
+    const state = o.refunded ? "refund ready" : o.settled ? `filled @ ${eth(BigInt(BigInt(o.buyChz) > 0n ? o.buyNav : o.nav), 2)}` : "fills after the result";
+    return `<div class="qorder"><span><b>${esc(o.symbol)}</b> <span class="tok">${esc(o.name)}</span> · <span class="mono">${what}</span> · ${state}</span>${o.settled
+      ? `<button class="ghost" onclick="claimOrder('${o.token}', ${o.epoch})">Claim</button>` : ""}</div>`;
   }).join("");
   $("pfPanel").innerHTML = `
     <div class="pf-head">
@@ -939,6 +1051,7 @@ function renderProfile() {
     </div>
     <h2>Holdings (${holdings.length})</h2>
     ${holdings.length ? `<table><thead><tr><th>Token</th><th class="num">Balance</th><th class="num">NAV</th><th class="num">Value</th><th class="num">Invested</th><th class="num">Realized</th><th class="num">PnL</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">No player tokens yet — buy one from the index table.</div>`}
+    ${queued ? `<h2>Queued orders (live matches)</h2><div class="qorders">${queued}</div>` : ""}
     <h2>Trade history (on-chain fills)</h2>
     <div class="fills">${fills || `<div class="empty">No fills yet.</div>`}</div>`;
 }

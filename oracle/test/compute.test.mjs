@@ -188,3 +188,74 @@ test("Round-N without named anchor is skipped", () => {
   const elig = eligibleMatches(raw);
   assert.equal(elig.length, 0);
 });
+
+test("frozen seeds: a ranking update does not move levels of matches already played", async () => {
+  const { seededLookup } = await import("../src/seeds.js");
+  const seeds = { atp: {}, wta: {} };
+  const week1 = { atp: new Map([["a", 1], ["d", 100]]) };
+  const week2 = { atp: new Map([["a", 50], ["d", 2]]) }; // rankings flip
+  const run = (live) => {
+    const st = newState();
+    applyMatch(st, mkMatch(), seededLookup(live, seeds).lookup);
+    return levelsForState(st);
+  };
+  const before = run(week1);
+  const after = run(week2);
+  assert.equal(after.get("a").level2dp, before.get("a").level2dp);
+  assert.equal(after.get("d").level2dp, before.get("d").level2dp);
+  assert.deepEqual(seeds.atp, { a: 1, d: 100 });
+});
+
+test("frozen seeds: a new player is seeded from the live ranking, unranked stays null", async () => {
+  const { seededLookup } = await import("../src/seeds.js");
+  const seeds = { atp: { a: 1 } };
+  const s = seededLookup({ atp: new Map([["a", 40], ["n", 7]]) }, seeds);
+  assert.equal(s.lookup("atp", "a"), 1);
+  assert.equal(s.lookup("atp", "n"), 7);
+  assert.equal(s.lookup("atp", "x"), null);
+  assert.equal(s.added(), 2);
+  // once seeded as unranked, a later live rank does not re-seed
+  assert.equal(seededLookup({ atp: new Map([["x", 3]]) }, seeds).lookup("atp", "x"), null);
+});
+
+test("board round labels resolve early rounds before any QF is completed", () => {
+  const r1 = { ...mkRounds("x")("Round 1", 1), eventId: "ev2" };
+  // only Round 1 has finished: no completed anchor yet
+  assert.equal(eligibleMatches([r1]).length, 0);
+  // the board already lists Round 2, QF, SF and F (scheduled / TBD): 32-draw
+  const labels = { "atp|ev2": { "Round 1": 16, "Round 2": 8, Quarterfinal: 4, Semifinal: 2, Final: 1 } };
+  const elig = eligibleMatches([r1], labels);
+  assert.equal(elig.length, 1);
+  assert.equal(elig[0].resolvedRound, "R32");
+});
+
+test("board labels never change a completed event's resolution", () => {
+  const mk = mkRounds("x");
+  const raw = [mk("Round 1", 1), mk("Round 2", 2), mk("Quarterfinal", 3), mk("Semifinal", 4), mk("Final", 5)];
+  const before = eligibleMatches(raw.map((m) => ({ ...m }))).map((m) => m.resolvedRound);
+  const labels = { "atp|ev": { "Round 1": 16, "Round 2": 8, Quarterfinal: 4, Semifinal: 2, Final: 1 } };
+  const after = eligibleMatches(raw.map((m) => ({ ...m })), labels).map((m) => m.resolvedRound);
+  assert.deepEqual(after, before);
+});
+
+test("daily history records losses below the base level", async () => {
+  const { buildHistory } = await import("../src/history.js");
+  const loss = { ...mkMatch(), players: [mkMatch().players[1], mkMatch().players[0]].map((p, k) => ({ ...p, winner: k === 1 })) };
+  loss.players[0] = { ...mkMatch().players[0], winner: false, lines: [{ value: 0, winner: false }, { value: 0, winner: false }] };
+  loss.players[1] = { ...mkMatch().players[1], winner: true, lines: [{ value: 6, winner: true }, { value: 6, winner: true }] };
+  const { out, levels } = buildHistory(eligibleMatches([loss]), mkRanks(new Map([["a", 1], ["d", 100]])));
+  const day = out.days.at(-1).lv;
+  assert.ok(day.a < 750000, "the favourite's loss shows below 7,500");
+  assert.equal(day.a, levels.get("a").level2dp);
+  assert.equal(day.d, levels.get("d").level2dp);
+});
+
+test("daily history includes a pending quarterfinal milestone on the last day", async () => {
+  const { buildHistory } = await import("../src/history.js");
+  // a QF won, event not finished: the SF milestone is still pending
+  const qf = mkMatch({ round: "Quarterfinal", compId: "qf1" });
+  const { out, levels } = buildHistory(eligibleMatches([qf]), mkRanks(new Map([["a", 50], ["d", 1]])));
+  const day = out.days.at(-1).lv;
+  assert.equal(day.a, levels.get("a").level2dp);
+  assert.equal(day.d, levels.get("d").level2dp);
+});

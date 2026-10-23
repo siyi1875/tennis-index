@@ -29,6 +29,15 @@ const SEL = {
 };
 const BOUGHT_TOPIC = ethers.id("Bought(address,address,uint256,uint256,uint256)");
 const SOLD_TOPIC = ethers.id("Sold(address,address,uint256,uint256,uint256)");
+// live-match queue: orders placed while a player's match was live
+const QUEUED_TOPICS = [
+  ethers.id("BuyQueued(address,address,uint32,uint256,uint256)"),
+  ethers.id("SellQueued(address,address,uint32,uint256)"),
+];
+const TOKEN_IFACE = new ethers.Interface([
+  "function orders(uint32 epoch, address who) view returns (uint256 paid, uint256 buyChz, uint256 sellTokens)",
+  "function batches(uint32 epoch) view returns (uint256 buyChz, uint256 sellTokens, uint256 minted, uint256 payout, uint256 nav, uint256 buyNav, bool settled, bool refunded)",
+]);
 
 const registryCache = { at: 0, byId: null };
 function loadRegistry() {
@@ -118,6 +127,7 @@ async function buildPortfolio(addr) {
   const totalInvested = holdings.reduce((s, h) => s + BigInt(h.invested), 0n);
   const totalRealized = holdings.reduce((s, h) => s + BigInt(h.realized), 0n);
   const chz = await provider.getBalance(addr).catch(() => 0n);
+  const pending = await pendingOrders(addr, tokens, padTopic, fromBlock).catch(() => []);
   const tsMap = new Map();
   for (const n of tsBlocks) { const t = await blockTs(n).catch(() => null); if (t) tsMap.set(n, t); }
   const fillsOut = fills
@@ -128,6 +138,7 @@ async function buildPortfolio(addr) {
     address: addr,
     chz: chz.toString(),
     holdings,
+    pending,
     fills: fillsOut,
     totals: {
       value: totalValue.toString(), invested: totalInvested.toString(), realized: totalRealized.toString(),
@@ -136,12 +147,49 @@ async function buildPortfolio(addr) {
   };
 }
 
+/// Queued orders `addr` has not claimed yet: one log query across all tokens
+/// (filtered to registered tokens), then the order and batch state per
+/// (token, epoch). settled = filled at the post-match price, ready to claim.
+async function pendingOrders(addr, tokens, padTopic, fromBlock) {
+  const byToken = new Map(tokens.map((t) => [t.token.toLowerCase(), t]));
+  const logs = await provider.getLogs({ fromBlock, topics: [QUEUED_TOPICS, null, padTopic] });
+  const keys = new Map();
+  for (const l of logs) {
+    const t = byToken.get(l.address.toLowerCase());
+    if (!t) continue; // same event signature from an unrelated contract
+    const epoch = Number(BigInt(l.topics[3]));
+    keys.set(`${t.token}|${epoch}`, { t, epoch });
+  }
+  const out = [];
+  await Promise.all([...keys.values()].map(async ({ t, epoch }) => {
+    const [o, b] = await Promise.all([
+      call(t.token, TOKEN_IFACE.encodeFunctionData("orders", [epoch, addr])),
+      call(t.token, TOKEN_IFACE.encodeFunctionData("batches", [epoch])),
+    ]);
+    const order = TOKEN_IFACE.decodeFunctionResult("orders", o);
+    if (order.buyChz === 0n && order.sellTokens === 0n) return; // claimed
+    const batch = TOKEN_IFACE.decodeFunctionResult("batches", b);
+    out.push({
+      espnId: t.espnId, symbol: t.symbol, name: t.name, token: t.token, epoch,
+      paid: order.paid.toString(), buyChz: order.buyChz.toString(), sellTokens: order.sellTokens.toString(),
+      settled: batch.settled, nav: batch.nav.toString(), buyNav: batch.buyNav.toString(), refunded: batch.refunded,
+    });
+  }));
+  return out.sort((a, b) => a.symbol.localeCompare(b.symbol) || a.epoch - b.epoch);
+}
+
 const statsCache = { at: 0, data: null };
 async function buildStats() {
   const registry = loadRegistry();
   const dep = JSON.parse(fs.readFileSync(path.join(stateDir, "deployments.json"), "utf8"));
   const core = dep.core;
   const coreBalance = await provider.getBalance(core).catch(() => 0n);
+  // treasury revenue sits in the core balance but never funds level rises
+  const treasuryBalance = await provider
+    .call({ to: core, data: ethers.id("treasuryBalance()").slice(0, 10) })
+    .then((x) => BigInt(x))
+    .catch(() => 0n); // pre-treasury cores have no such getter
+  const poolBalance = coreBalance > treasuryBalance ? coreBalance - treasuryBalance : 0n;
   const tokens = Object.values(registry).filter((r) => r.token);
   const supplySel = SEL.balanceOf; // reuse pattern below
   // read supply per token (batched), then reserve + level for supplied ones
@@ -165,13 +213,15 @@ async function buildStats() {
   }));
   let totalTarget = 0n, totalReserve = 0n;
   for (const t of supplied) {
-    const target = (t.supply * BigInt(t.level)) / 750000n;
+    const target = (t.supply * BigInt(t.level) * 100n) / 750000n; // 100 CHZ per token at 7,500.00 (PlayerToken.targetReserve)
     totalTarget += target;
     totalReserve += t.reserve;
   }
   return {
     updatedAt: new Date().toISOString(),
     coreBalance: coreBalance.toString(),
+    poolBalance: poolBalance.toString(),
+    treasuryBalance: treasuryBalance.toString(),
     suppliedTokens: supplied.length,
     totalTarget: totalTarget.toString(),
     totalReserve: totalReserve.toString(),

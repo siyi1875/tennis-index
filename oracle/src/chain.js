@@ -7,7 +7,10 @@ import { ethers } from "ethers";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const RPC_URL = process.env.SPICY_RPC_URL || "https://spicy-rpc.chiliz.com";
-export const PK = process.env.ORACLE_PRIVATE_KEY || fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
+/// Read lazily so read-only commands (compute, report, close) run without a key.
+export function loadPrivateKey() {
+  return process.env.ORACLE_PRIVATE_KEY || fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
+}
 
 export const DEPLOYMENTS_FILE = path.join(__dirname, "..", "state", "deployments.json");
 export const STATE_FILE = path.join(__dirname, "..", "state", "season-2026.json");
@@ -34,7 +37,27 @@ export const CORE_ABI = [
   "function updateLevels(uint256[] ids, uint128[] levels)",
   "function calibrateLevel(uint256 id, uint128 newLevel)",
   "function setPlayerFees(uint256 id, uint16 buyBps, uint16 sellBps)",
+  "function setDefaultFees(uint16 buyBps, uint16 sellBps)",
+  "function defaultBuyFeeBps() view returns (uint16)",
+  "function defaultSellFeeBps() view returns (uint16)",
+  "function treasury() view returns (address)",
+  "function treasuryShareBps() view returns (uint16)",
+  "function treasuryBalance() view returns (uint256)",
+  "function poolBalance() view returns (uint256)",
+  "function withdrawTreasury(uint256 amount)",
+  "function setTreasury(address treasury, uint16 shareBps)",
   "function seasonReset(uint256[] ids)",
+  "function scheduleHalts(uint256[] ids, uint64[] froms)",
+  "function resume(uint256[] ids)",
+  "function heartbeat()",
+  "function haltFrom(address token) view returns (uint64)",
+  "function haltFromRange(uint256 fromId, uint256 toId) view returns (uint64[])",
+  "function halted(address token) view returns (bool)",
+  "function lastHeartbeat() view returns (uint64)",
+  "function heartbeatMaxAge() view returns (uint64)",
+  "function tradeStatus(address token) view returns (uint8)",
+  "function targetNavOf(address token) view returns (uint256)",
+  "function navScaleOf(address token) view returns (uint256)",
   "function topUp() payable",
   "function pause()",
   "function unpause()",
@@ -54,15 +77,18 @@ export const TOKEN_ABI = [
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
   "function navWad() view returns (uint256)",
-  "function targetNav(uint128) view returns (uint256)",
   "function reserveWad() view returns (uint256)",
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function buy(address to, uint256 minTokensOut) payable returns (uint256)",
   "function sell(uint256 tokenIn, address to, uint256 minChzOut) returns (uint256)",
+  "function epoch() view returns (uint32)",
+  "function pendingChz() view returns (uint256)",
+  "function orders(uint32 epoch, address who) view returns (uint256 paid, uint256 buyChz, uint256 sellTokens)",
+  "function claim(uint32 epoch, address who) returns (uint256 tokensOut, uint256 chzOut)",
 ];
 
-export function getWallet(pk = PK) {
+export function getWallet(pk = loadPrivateKey()) {
   return new ethers.Wallet(pk, new ethers.JsonRpcProvider(RPC_URL, 88882, { staticNetwork: true }));
 }
 
