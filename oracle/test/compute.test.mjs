@@ -237,3 +237,15 @@ test("board labels never change a completed event's resolution", () => {
   const after = eligibleMatches(raw.map((m) => ({ ...m })), labels).map((m) => m.resolvedRound);
   assert.deepEqual(after, before);
 });
+
+test("daily history records losses below the base level", async () => {
+  const { buildHistory } = await import("../src/history.js");
+  const loss = { ...mkMatch(), players: [mkMatch().players[1], mkMatch().players[0]].map((p, k) => ({ ...p, winner: k === 1 })) };
+  loss.players[0] = { ...mkMatch().players[0], winner: false, lines: [{ value: 0, winner: false }, { value: 0, winner: false }] };
+  loss.players[1] = { ...mkMatch().players[1], winner: true, lines: [{ value: 6, winner: true }, { value: 6, winner: true }] };
+  const { out, levels } = buildHistory(eligibleMatches([loss]), mkRanks(new Map([["a", 1], ["d", 100]])));
+  const day = out.days.at(-1).lv;
+  assert.ok(day.a < 750000, "the favourite's loss shows below 7,500");
+  assert.equal(day.a, levels.get("a").level2dp);
+  assert.equal(day.d, levels.get("d").level2dp);
+});
