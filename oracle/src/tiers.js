@@ -1,6 +1,5 @@
-// Tournament tier + round classification (FSPI-style weighting).
-// Tier multiplier mirrors FSPI's "Seasonal Adjustment Factor" concept:
-// bigger stages carry more weight.
+// Tournament tier + round classification.
+// Tier multiplier: bigger stages carry more weight.
 export const TIERS = {
   GS: { label: "Grand Slam", mult: 1.5 },
   YEC: { label: "Tour Finals", mult: 1.25 },
@@ -64,7 +63,7 @@ const P500_WTA = [
 ];
 
 // Team events / exhibitions / lower circuits to exclude (not tour-level
-// individual events: FSPI indexes the main tours only)
+// individual events: only the main tours are rated)
 const EXCLUDED = [
   "United Cup", "Davis Cup", "Billie Jean King Cup", "Laver Cup", "Hopman Cup",
   "ATP Cup", "Next Gen ATP Finals", "Challenger", "ITF", "UTS", "Exhibition",
@@ -124,7 +123,7 @@ export function classifyRound(roundName) {
   return null; // unknown round => skip (only official recognized rounds count)
 }
 
-/// Expectation-relative tier/round weights (tennis adaptation of FSPI).
+/// Expectation-relative tier/round weights.
 /// All points are integers (2dp scale = points * 100 applied in compute).
 export const POINTS = {
   WIN: 50,

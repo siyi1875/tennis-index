@@ -24,7 +24,7 @@ contract PlayerTokenTest is Test {
         vm.prank(admin);
         core.setDefaultFees(0, 0);
         vm.prank(admin);
-        uint256 id = core.addPlayer("ATP-SIN", 1, BASE);
+        uint256 id = core.addPlayer("M-SIN", 1, BASE);
         tok = PlayerToken(payable(core.player(id).token));
         deal(alice, 100000 ether);
         deal(bob, 100000 ether);
@@ -132,7 +132,7 @@ contract PlayerTokenTest is Test {
         vm.prank(admin);
         core.setDefaultFees(0, 0);
         vm.prank(admin);
-        uint256 id = core.addPlayer("ATP-U", 1, BASE);
+        uint256 id = core.addPlayer("M-U", 1, BASE);
         tok = PlayerToken(payable(core.player(id).token));
         tok.buy{value: 100 ether}(alice, 0);
         vm.prank(admin);
@@ -292,7 +292,7 @@ contract PlayerTokenTest is Test {
         vm.prank(admin);
         core.setDefaultFees(0, 0);
         vm.prank(admin);
-        tok = PlayerToken(payable(core.player(core.addPlayer("ATP-U", 1, BASE)).token));
+        tok = PlayerToken(payable(core.player(core.addPlayer("M-U", 1, BASE)).token));
         tok.buy{value: 100 ether}(alice, 0);
         vm.prank(admin);
         core.calibrateLevel(0, 900_000); // empty pool: NAV stays 100, target 120

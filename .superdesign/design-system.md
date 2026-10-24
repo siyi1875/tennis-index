@@ -1,4 +1,4 @@
-# FSPI Tennis Index — Design System ("paper")
+# Courtline — Design System ("paper")
 
 ## Product context
 
@@ -62,7 +62,7 @@ Reference: exchange.papertrade.xyz warm paper look. Two modes, same tokens:
   (1px background gap) for stat strips.
 - **Radii:** 6/8/10/14 (input 8, panel 14, pills/buttons full 999).
 - **Header:** 56px sticky, blurred `color-mix` paper, hairline bottom. Left:
-  ball mark (pure CSS circle with clipped arcs, chartreuse) + "FSPI *tennis index*".
+  ball mark (pure CSS circle with clipped arcs, chartreuse) + "Courtline".
   Right: Docs navlink, theme toggle, portfolio button, wallet chip, Connect CTA
   (green, pill).
 - **Density:** editorial spacing on docs (max 720px column, 44px section rhythm),

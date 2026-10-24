@@ -25,8 +25,8 @@ function targetReserve(uint256 supply, uint128 level, uint256 scaleWad) pure ret
 }
 
 /// @title PlayerToken
-/// @notice Tradable index token for one tennis player (FSPI-style Points
-///         Attribution Table computed off-chain, levels fed on-chain by the
+/// @notice Tradable form token for one tennis player (form level computed
+///         off-chain from match results, levels fed on-chain by the
 ///         oracle through the TennisIndex core). Deployed as a minimal proxy
 ///         clone from the implementation registered in the core.
 ///
@@ -56,7 +56,7 @@ function targetReserve(uint256 supply, uint128 level, uint256 scaleWad) pure ret
 ///
 /// Gas layout: one packed slot holds core (160b) | buyFee (16b) | sellFee
 /// (16b) | symbol (8 ASCII chars, little-endian). The symbol is limited to 8
-/// characters on purpose ("ATP-SIN" style codes).
+/// characters on purpose ("M-SIN" style codes).
 contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
     uint256 private constant _PACKED_FEES_MASK = ((1 << 32) - 1) << 64;
     uint256 private _packed; // core (160b) | buyFee (16b) | sellFee (16b) | symbol (8 chars, LE)
@@ -154,7 +154,7 @@ contract PlayerToken is ERC20Upgradeable, ReentrancyGuardUpgradeable {
     }
 
     function name() public view override returns (string memory) {
-        return string.concat("FSPI Tennis ", symbol());
+        return string.concat("Tennis Form ", symbol());
     }
 
     receive() external payable {}

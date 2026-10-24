@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import https from "node:https";
 import { ethers } from "ethers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,8 +89,18 @@ export const TOKEN_ABI = [
   "function claim(uint32 epoch, address who) returns (uint256 tokensOut, uint256 chzOut)",
 ];
 
+// Connect over IPv4: on networks without working IPv6 the RPC's AAAA records stall
+// Node's connections (curl falls back, Node often does not). Wait up to a minute.
+const rpcAgent = new https.Agent({ keepAlive: true, family: 4 });
+export function rpcRequest(url = RPC_URL) {
+  const req = new ethers.FetchRequest(url);
+  req.timeout = 60_000;
+  if (url.startsWith("https:")) req.getUrlFunc = ethers.FetchRequest.createGetUrlFunc({ agent: rpcAgent });
+  return req;
+}
+
 export function getWallet(pk = loadPrivateKey()) {
-  return new ethers.Wallet(pk, new ethers.JsonRpcProvider(RPC_URL, 88882, { staticNetwork: true }));
+  return new ethers.Wallet(pk, new ethers.JsonRpcProvider(rpcRequest(), 88882, { staticNetwork: true }));
 }
 
 export function getCore(wallet) {
