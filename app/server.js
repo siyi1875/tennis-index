@@ -13,7 +13,11 @@ const require = createRequire(path.join(root, "..", "oracle", "package.json"));
 const { ethers, JsonRpcProvider } = require("ethers");
 
 const RPC = process.env.RPC_URL || "https://spicy-rpc.chiliz.com";
-const provider = new JsonRpcProvider(RPC, 88882, { staticNetwork: true });
+// IPv4 only: without working IPv6 the RPC's AAAA records stall Node's connections
+const rpcReq = new ethers.FetchRequest(RPC);
+rpcReq.timeout = 60_000;
+if (RPC.startsWith("https:")) rpcReq.getUrlFunc = ethers.FetchRequest.createGetUrlFunc({ agent: new (require("node:https").Agent)({ keepAlive: true, family: 4 }) });
+const provider = new JsonRpcProvider(rpcReq, 88882, { staticNetwork: true });
 
 const API = {
   "/api/registry": "registry.json",

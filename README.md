@@ -135,8 +135,8 @@ rounds; a 4th-deep round maps to R128 vs R96 by match count (≥40 → 128-draw)
 
 | Contract | Address |
 |---|---|
-| TennisIndex core | `0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d` |
-| PlayerToken implementation | `0xe36aaf8e32c4426eb1ec7e1fd5debe4379c2ba7b` |
+| TennisIndex core | `0x6cec3949ca5ae6a8395b0aa4a354047843929c75` |
+| PlayerToken implementation | `0x9566fa6d6ddc75c8bb202e111c77a4b224274197` |
 | Admin / Oracle / Treasury keyholder | `0xf47629f1ad3377603C45eF721248e2867E6bb672` |
 
 197 players registered (men's and women's top-100 by current ranking, plus the

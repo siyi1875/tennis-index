@@ -283,8 +283,8 @@ reserve target = supply × NAV</div>
     <h2 id="architecture">9 · Architecture & addresses</h2>
     <ul>
       <li><b>Chain.</b> Chiliz Spicy testnet — chainId <code>88882</code>, RPC <code>spicy-rpc.chiliz.com</code>, explorer <code>spicy.chiliscan.com</code>.</li>
-      <li><b>Core</b> <span class="addr">0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d</span> — the index contract: player registry, oracle-gated level feed with ±25% cap, reserve accounting, fee routing, season reset. Roles: <code>ORACLE_ROLE</code> (level feed), <code>PAUSER_ROLE</code>, admin.</li>
-      <li><b>PlayerToken</b> (implementation <span class="addr">0xe36aaf8e32c4426eb1ec7e1fd5debe4379c2ba7b</span>) — one ERC-20 per player with <code>buy()</code>/<code>sell()</code> mint/burn at NAV, per-token fees, and its own CHZ reserve.</li>
+      <li><b>Core</b> <span class="addr">0x6cec3949ca5ae6a8395b0aa4a354047843929c75</span> — the index contract: player registry, oracle-gated level feed with ±25% cap, reserve accounting, fee routing, season reset. Roles: <code>ORACLE_ROLE</code> (level feed), <code>PAUSER_ROLE</code>, admin.</li>
+      <li><b>PlayerToken</b> (implementation <span class="addr">0x9566fa6d6ddc75c8bb202e111c77a4b224274197</span>) — one ERC-20 per player with <code>buy()</code>/<code>sell()</code> mint/burn at NAV, per-token fees, and its own CHZ reserve.</li>
       <li><b>Keeper</b> — the oracle node (<code>oracle/src/run.js</code>): backfill, compute, push, close, fee repair, faucet. 202 players registered and calibrated; watch loop running continuously.</li>
       <li><b>UI</b> — static SPA + a small Node server that serves state files and does read-only on-chain portfolio scans. Wallets connect via EIP-6963; trades are signed by your wallet, never proxied.</li>
     </ul>
