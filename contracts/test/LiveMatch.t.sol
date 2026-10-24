@@ -27,7 +27,7 @@ contract LiveMatchTest is Test {
         vm.prank(oracle);
         core.heartbeat();
         vm.prank(admin);
-        id = core.addPlayer("ATP-SIN", 1, BASE); // default 1%/1% fees
+        id = core.addPlayer("M-SIN", 1, BASE); // default 1%/1% fees
         tok = PlayerToken(payable(core.player(id).token));
         deal(holder, 10_000 ether);
         deal(attacker, 10_000 ether);
@@ -219,7 +219,7 @@ contract LiveMatchTest is Test {
 
     function test_haltIsPerPlayer() public {
         vm.prank(admin);
-        uint256 other = core.addPlayer("WTA-OTH", 2, BASE);
+        uint256 other = core.addPlayer("W-OTH", 2, BASE);
         PlayerToken tok2 = PlayerToken(payable(core.player(other).token));
         _halt();
         vm.prank(bob);
@@ -316,7 +316,7 @@ contract LiveMatchTest is Test {
 
     function test_resetCarriesPriceForUnheldTokensToo() public {
         vm.prank(admin);
-        uint256 other = core.addPlayer("WTA-OTH", 2, 600_000); // 80 CHZ, no supply
+        uint256 other = core.addPlayer("W-OTH", 2, 600_000); // 80 CHZ, no supply
         address t = core.player(other).token;
         uint256[] memory ids = new uint256[](1);
         ids[0] = other;
@@ -428,7 +428,7 @@ contract LiveMatchTest is Test {
 
     function test_haltFromRangeReadsAllPlayers() public {
         vm.prank(admin);
-        core.addPlayer("WTA-OTH", 2, BASE);
+        core.addPlayer("W-OTH", 2, BASE);
         _schedule(uint64(block.timestamp + 1 hours));
         uint64[] memory h = core.haltFromRange(0, 5); // clamps to playerCount
         assertEq(h.length, 2);

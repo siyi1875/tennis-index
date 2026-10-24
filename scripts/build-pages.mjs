@@ -53,15 +53,18 @@ const shim = `<script>
 function buildHtml(src, dst) {
   let html = fs.readFileSync(path.join(appDir, src), "utf8");
   html = html
+    .replaceAll('href="/market"', 'href="./market.html"')
     .replaceAll('href="/docs"', 'href="./docs.html"')
     .replaceAll('href="/docs#', 'href="./docs.html#')
     .replaceAll('href="/"', 'href="./index.html"')
+    .replaceAll("location.href='/'", "location.href='./index.html'")
     .replaceAll('src="/', 'src="./');
-  html = html.replace("</head>", `<meta name="fspi-build" content="${builtAt}">\n${shim}\n</head>`);
+  html = html.replace("</head>", `<meta name="courtline-build" content="${builtAt}">\n${shim}\n</head>`);
   fs.writeFileSync(path.join(outDir, dst), html);
 }
 
 buildHtml("index.html", "index.html");
+buildHtml("market.html", "market.html");
 buildHtml("docs.html", "docs.html");
 fs.writeFileSync(path.join(outDir, ".nojekyll"), "");
 

@@ -4,1240 +4,293 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f4ecd8">
-<title>FSPI Tennis Index — Chiliz Spicy</title>
+<title>Courtline</title>
+<meta name="description" content="Every top men's and women's tennis player has a token. Wins push the price up, losses push it down, and you can buy or sell at any time. Testnet demo.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23d3e04f'/><path d='M6 10c6 4 14 4 20 0M6 22c6-4 14-4 20 0' stroke='%232d5f3a' stroke-width='2' fill='none'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // follow the market page's saved theme, else the system setting
+  try { const t = localStorage.getItem("fspi_theme"); if (t) document.documentElement.dataset.theme = t === "night" ? "dark" : "light"; } catch {}
+</script>
 <style>
+  /* Same tokens as the market page. Layout: one calm column; the hero pairs the pitch with a live market card. */
   :root {
-    --paper: #f4ecd8; --raised: #faf6ed; --sunk: #ede3cf; --well: #f7f1e1;
+    --paper: #f4ecd8; --raised: #faf6ed; --sunk: #ede3cf;
     --line: #ddd2b8; --line-strong: #b9ab8c;
-    --ink: #262019; --ink-2: #6f6454; --ink-3: #9a8f7c;
-    --up: #2d5f3a; --down: #a83a3a; --up-soft: rgba(45,95,58,.1); --down-soft: rgba(168,58,58,.1);
-    --tennis: #cdd63f; --tennis-ink: #1c2205; --gold: #a67c1b; --gold-soft: rgba(166,124,27,.12);
-    --chart: #2d5f3a; --chart-fill: rgba(45,95,58,.1);
+    --ink: #262019; --ink-2: #6f6454; --ink-3: #8d826f;
+    --up: #2d5f3a; --down: #a83a3a;
+    --tennis: #cdd63f;
+    --chart: #2d5f3a; --chart-fill: rgba(45,95,58,.12);
+    --shadow: 0 1px 2px rgba(38,32,25,.06), 0 8px 24px rgba(38,32,25,.07);
     --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
     --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
-    --r-xs: 6px; --r-sm: 8px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
-    --shadow: 0 1px 2px rgba(38,32,25,.06), 0 8px 24px rgba(38,32,25,.07);
+    color-scheme: light;
   }
-  [data-theme="night"] {
-    --paper: #1a1410; --raised: #231c15; --sunk: #130e09; --well: #1e1710;
-    --line: rgba(244,236,216,.08); --line-strong: rgba(244,236,216,.17);
-    --ink: #f2e8d3; --ink-2: #b4a58b; --ink-3: #877a63;
-    --up: #90cb9c; --down: #d98d77; --up-soft: rgba(144,203,156,.12); --down-soft: rgba(217,141,119,.12);
-    --tennis: #d3e04f; --tennis-ink: #1c2205; --gold: #e5c46a; --gold-soft: rgba(229,196,106,.13);
-    --chart: #90cb9c; --chart-fill: rgba(144,203,156,.1);
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1a1410; --raised: #231c15; --sunk: #130e09;
+      --line: rgba(244,236,216,.1); --line-strong: rgba(244,236,216,.2);
+      --ink: #f2e8d3; --ink-2: #b4a58b; --ink-3: #8f8268;
+      --up: #90cb9c; --down: #d98d77;
+      --tennis: #d3e04f;
+      --chart: #90cb9c; --chart-fill: rgba(144,203,156,.12);
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.55);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1a1410; --raised: #231c15; --sunk: #130e09;
+    --line: rgba(244,236,216,.1); --line-strong: rgba(244,236,216,.2);
+    --ink: #f2e8d3; --ink-2: #b4a58b; --ink-3: #8f8268;
+    --up: #90cb9c; --down: #d98d77;
+    --tennis: #d3e04f;
+    --chart: #90cb9c; --chart-fill: rgba(144,203,156,.12);
     --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.55);
+    color-scheme: dark;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); color: var(--ink); font: 400 14px/1.5 var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
   a { color: inherit; text-decoration: none; }
-  ::selection { background: rgba(205,214,63,.35); }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 5px; border: 3px solid var(--paper); }
-  ::-webkit-scrollbar-track { background: transparent; }
-  button, input { font-family: inherit; }
-  :focus-visible { outline: 2px solid var(--up); outline-offset: 2px; }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px 56px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
 
-  /* ---------- header ---------- */
-  header {
-    display: flex; align-items: center; gap: 10px; height: 56px;
-    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 40;
-    background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(8px);
-    margin: 0 -24px 28px; padding: 0 24px;
-  }
-  .brand { display: flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; margin-right: 8px; }
-  .brand .mark { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--tennis); position: relative; overflow: hidden; }
-  .brand .mark::before, .brand .mark::after {
-    content: ""; position: absolute; inset: 0; border-radius: 50%;
-    border: 1.5px solid var(--tennis-ink); opacity: .85;
-  }
-  .brand .mark::before { clip-path: inset(0 0 0 42%); }
-  .brand .mark::after { clip-path: inset(0 42% 0 0); border-style: dashed; }
-  .brand h1 { font: 600 14px/1 var(--sans); letter-spacing: .1px; }
-  .brand h1 em { font-style: normal; color: var(--ink-3); font-weight: 500; margin-left: 6px; }
-  header .spacer { flex: 1; }
-  .badge {
-    font: 500 11px/1 var(--sans); padding: 4px 10px; border-radius: var(--r-full);
-    border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; background: var(--raised);
-  }
-  .badge.gold { border-color: transparent; color: var(--gold); background: var(--gold-soft); }
-  .badge .dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: 1.5px; }
-  .icon-btn {
-    background: none; border: 1px solid var(--line); color: var(--ink-2); border-radius: var(--r-full);
-    width: 32px; height: 32px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-    transition: border-color .15s ease, color .15s ease;
-  }
-  .icon-btn:hover { border-color: var(--line-strong); color: var(--ink); }
-  .navlink { font: 500 12.5px/1 var(--sans); color: var(--ink-2); padding: 8px 10px; border-radius: var(--r-sm); }
-  .navlink:hover { color: var(--ink); background: var(--sunk); }
-  .cta {
-    background: var(--up); color: #f4ecd8; border: 0; border-radius: var(--r-full);
-    padding: 8px 16px; font: 600 12.5px/1 var(--sans); cursor: pointer;
-    transition: filter .15s ease, transform .15s ease;
-  }
-  [data-theme="night"] .cta { color: #142a1c; }
-  .cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
-  .ghost {
-    background: var(--raised); border: 1px solid var(--line); color: var(--ink);
-    border-radius: var(--r-full); padding: 7px 14px; cursor: pointer; font: 500 12.5px/1 var(--sans);
-    transition: border-color .15s ease, background .15s ease;
-  }
-  .ghost:hover { border-color: var(--line-strong); background: var(--sunk); }
-  .chip {
-    display: none; align-items: center; gap: 8px; background: var(--raised);
-    border: 1px solid var(--line); border-radius: var(--r-full); padding: 6px 13px 6px 10px;
-    cursor: pointer; font-size: 12.5px; transition: border-color .15s ease;
-  }
-  .chip:hover { border-color: var(--line-strong); }
-  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--up); flex: none; }
-  .chip .addr { font-family: var(--mono); font-weight: 600; font-size: 12px; }
-  .chip .bal { font-family: var(--mono); color: var(--ink-2); font-size: 11.5px; }
+  nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+  .ball { width: 22px; height: 22px; border-radius: 50%; background: var(--tennis); position: relative; overflow: hidden; flex: none; }
+  .ball::before, .ball::after { content: ""; position: absolute; left: -45%; width: 190%; height: 100%; border: 1.6px solid rgba(28,34,5,.55); border-radius: 50%; }
+  .ball::before { top: -62%; } .ball::after { top: 62%; }
+  .links { display: flex; align-items: center; gap: 22px; font-size: 14px; color: var(--ink-2); }
+  .links a:hover { color: var(--ink); }
+  .btn { display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); transition: transform .15s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn.sm { padding: 8px 14px; }
 
-  /* ---------- stat ticker ---------- */
-  .stats {
-    display: flex; align-items: stretch; background: var(--raised); border: 1px solid var(--line);
-    border-radius: var(--r-md); overflow-x: auto; margin-bottom: 20px;
-  }
-  .stat { padding: 12px 18px; border-right: 1px solid var(--line); min-width: 128px; flex: 1; }
-  .stat:last-child { border-right: 0; }
-  .stat .k { font: 500 10px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .8px; white-space: nowrap; }
-  .stat .v { font: 600 16px/1.3 var(--mono); margin-top: 5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .stat .v.acc { color: var(--up); }
-  .stat .v.down { color: var(--down); }
-  .stat .v.up { color: var(--up); }
+  .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 48px; align-items: center; padding-block: 56px 72px; }
+  h1 { font-size: clamp(36px, 5.4vw, 58px); line-height: 1.04; letter-spacing: -.03em; font-weight: 700; margin: 0 0 18px; text-wrap: balance; }
+  h1 mark { background: linear-gradient(transparent 62%, var(--tennis) 62%, var(--tennis) 92%, transparent 92%); color: inherit; padding: 0 2px; }
+  .lede { font-size: 17px; color: var(--ink-2); max-width: 46ch; margin: 0 0 28px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
 
-  /* ---------- toolbar ---------- */
-  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-  .tabs { display: inline-flex; background: var(--sunk); border-radius: var(--r-full); padding: 3px; gap: 2px; }
-  .tabs button {
-    background: none; border: 0; color: var(--ink-2); padding: 6px 18px; cursor: pointer;
-    font: 600 12.5px/1 var(--sans); border-radius: var(--r-full); transition: all .15s ease;
-  }
-  .tabs button.on { background: var(--raised); color: var(--ink); box-shadow: 0 1px 2px rgba(38,32,25,.12); }
-  [data-theme="night"] .tabs button.on { box-shadow: 0 1px 2px rgba(0,0,0,.45); }
-  [data-theme="night"] .side-toggle button.buy.on,
-  [data-theme="night"] .side-toggle button.sell.on { box-shadow: 0 1px 2px rgba(0,0,0,.45); }
-  input.search {
-    background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-full); color: var(--ink);
-    padding: 8px 14px; font: 400 13px/1 var(--sans); width: 250px; outline: none; transition: border-color .15s ease;
-  }
-  input.search::placeholder { color: var(--ink-3); }
-  input.search:focus { border-color: var(--line-strong); }
-  .hint { color: var(--ink-3); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .card { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .card .top { padding: 20px 22px 6px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .card .who { font-weight: 600; }
+  .card .sym { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .card .price { text-align: right; }
+  .card .price b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .chg { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--up); font-variant-numeric: tabular-nums; }
+  .chg.neg { color: var(--down); }
+  .chart { display: block; width: 100%; height: auto; }
+  .chart text { font-family: var(--mono); font-size: 10px; fill: var(--ink-3); }
+  .rows { border-top: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: baseline; padding: 11px 22px; font-size: 13.5px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .n span { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: 8px; }
+  .row .p { font-family: var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .card .foot { padding: 10px 22px 14px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--line); background: var(--sunk); }
 
-  /* ---------- layout ---------- */
-  .grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
-  .grid.with-detail { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
-  @media (max-width: 1020px) { .grid.with-detail { grid-template-columns: 1fr; } }
+  section { padding-block: 64px; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(24px, 3.2vw, 32px); letter-spacing: -.025em; line-height: 1.15; margin: 0 0 28px; font-weight: 700; text-wrap: balance; }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .step { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+  .step h3 { font-size: 18px; letter-spacing: -.015em; margin: 0 0 8px; }
+  .step p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+  .eg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--sunk); font-family: var(--mono); font-size: 12px; color: var(--ink-2); line-height: 1.7; }
+  .eg b { color: var(--ink); font-weight: 600; } .eg .up { color: var(--up); font-weight: 600; }
 
-  .panel { background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
-  .panel h2 {
-    font: 600 11px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .9px;
-    padding: 14px 18px 11px; border-bottom: 1px solid var(--line);
-  }
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .pair .item { padding-left: 18px; border-left: 2px solid var(--tennis); }
+  .pair .item h3 { font-size: 17px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .pair .item p { margin: 0; color: var(--ink-2); font-size: 14.5px; max-width: 48ch; }
 
-  /* ---------- index table ---------- */
-  .panel > .tablewrap { max-height: 74vh; overflow-y: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th {
-    position: sticky; top: 0; z-index: 2; background: var(--raised);
-    font: 500 10.5px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .7px;
-    text-align: left; padding: 10px 16px; border-bottom: 1px solid var(--line);
-    cursor: pointer; user-select: none; white-space: nowrap;
-  }
-  th.num, td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  td { padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  tbody tr:last-child td { border-bottom: 0; }
-  tr.row { cursor: pointer; transition: background .1s ease; }
-  tr.row:hover { background: var(--sunk); }
-  tr.row.sel { background: var(--sunk); }
-  tr.row.sel .nm { font-weight: 700; }
-  .rk { color: var(--ink-3); font-family: var(--mono); font-size: 11px; width: 38px; }
-  .nm { font-weight: 600; }
-  .sym { color: var(--ink-3); font: 500 10.5px/1 var(--mono); letter-spacing: .4px; margin-left: 7px; }
-  .lv { font-weight: 600; font-size: 13px; }
-  .delta { font-size: 12px; }
-  .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--ink-3); }
-  .spark { width: 88px; height: 24px; display: block; }
-  .tok { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
-  .tok.none { opacity: .55; }
-  .tok-pill { font: 600 10px/1 var(--mono); color: var(--up); letter-spacing: .4px; }
-  .tok-pill::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--up); margin-right: 5px; vertical-align: 1px; }
-  .more-row td { color: var(--ink-3); font-size: 12px; }
-  .skl { height: 12px; border-radius: 4px; background: var(--sunk); display: inline-block; position: relative; overflow: hidden; }
-  .skl::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); animation: shl 1.2s infinite; }
-  [data-theme="night"] .skl::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.07), transparent); }
-  @keyframes shl { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+  .fact b { display: block; font-family: var(--mono); font-size: 30px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .fact span { font-size: 13px; color: var(--ink-2); }
 
-  /* ---------- detail ---------- */
-  .detail .head { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .detail .head .name { font: 600 20px/1.2 var(--sans); letter-spacing: -.01em; }
-  .detail .head .meta { color: var(--ink-3); font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .detail .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
-  @media (max-width: 560px) { .detail .kv { grid-template-columns: repeat(2, 1fr); } }
-  .detail .kv div { background: var(--raised); padding: 12px 16px; }
-  .detail .kv div .k { font: 500 10px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .7px; }
-  .detail .kv div .v { font: 600 15px/1.3 var(--mono); margin-top: 5px; font-variant-numeric: tabular-nums; }
-  .detail .kv div .v .delta { font-size: 12px; }
-  .chartbox { padding: 16px 18px 8px; }
-  .feed, .fills { max-height: 380px; overflow-y: auto; }
-  .feed .ev, .fills .ev {
-    display: flex; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--line);
-    align-items: baseline; font-size: 12.5px;
-  }
-  .feed .ev:last-child, .fills .ev:last-child { border-bottom: 0; }
-  .feed .ev:hover, .fills .ev:hover { background: var(--sunk); }
-  .feed .d, .fills .d { color: var(--ink-3); font-family: var(--mono); font-size: 11px; width: 74px; flex: none; white-space: nowrap; }
-  .feed .m, .fills .m { flex: 1; min-width: 0; }
-  .feed .m .l1, .fills .m .l1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .feed .m .l2 { color: var(--ink-3); font-size: 11.5px; margin-top: 1px; }
-  .feed .cp { font-family: var(--mono); width: 62px; text-align: right; flex: none; font-size: 12px; }
-  .feed .lvafter { font-family: var(--mono); color: var(--ink-2); width: 78px; text-align: right; flex: none; font-size: 11px; }
-  .tag {
-    font: 600 9.5px/1 var(--mono); padding: 2.5px 6px; border-radius: 4px;
-    border: 1px solid var(--line); color: var(--ink-2); margin-right: 6px; letter-spacing: .4px;
-  }
-  .tag.gs { border-color: transparent; color: var(--gold); background: var(--gold-soft); }
-  .tag.win { color: var(--up); border-color: transparent; background: var(--up-soft); }
-  .tag.loss { color: var(--down); border-color: transparent; background: var(--down-soft); }
-  .tag.mil { border-color: transparent; color: var(--tennis-ink); background: var(--tennis); font-weight: 700; }
-  [data-theme="night"] .tag.mil { color: #1c2205; }
+  .final { text-align: center; padding-block: 72px; }
+  .final h2 { margin-inline: auto; max-width: 20ch; }
+  .final .cta { justify-content: center; }
+  footer { border-top: 1px solid var(--line); padding-block: 28px 40px; font-size: 12.5px; color: var(--ink-3); display: grid; gap: 10px; }
+  footer p { margin: 0; max-width: 90ch; }
+  footer .mono { font-family: var(--mono); font-size: 11.5px; overflow-wrap: anywhere; }
 
-  .feed .exp { color: var(--ink-3); font-family: var(--mono); font-size: 10.5px; }
-  .feed .exp b { color: var(--ink-2); font-weight: 600; }
-  .feednote { padding: 9px 18px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 11.5px; background: var(--well); }
-  .tablecap { padding: 11px 18px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 11.5px; }
-
-  /* ---------- order card ---------- */
-  .tokenbox { padding: 16px 18px; border-top: 1px solid var(--line); background: var(--well); }
-  .order-sym-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  .toksym { font: 700 13px/1 var(--mono); letter-spacing: .3px; }
-  .tokaddr { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
-  .navbig { font: 700 26px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
-  .navbig small { font: 500 11px/1 var(--sans); color: var(--ink-3); margin-left: 7px; letter-spacing: 0; }
-  .navsub { color: var(--ink-3); font-size: 11.5px; margin: 4px 0 14px; }
-  .side-toggle { display: grid; grid-template-columns: 1fr 1fr; background: var(--sunk); border-radius: var(--r-sm); padding: 3px; gap: 2px; margin-bottom: 10px; }
-  .side-toggle button {
-    background: none; border: 0; color: var(--ink-2); padding: 8px 0; cursor: pointer;
-    font: 600 12.5px/1 var(--sans); border-radius: var(--r-xs); transition: all .15s ease;
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 28px 48px; }
+    .steps, .pair { grid-template-columns: minmax(0, 1fr); }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px; }
+    .links a:not(.btn) { display: none; }
+    section { padding-block: 48px; }
   }
-  .side-toggle button.buy.on { background: var(--raised); color: var(--up); box-shadow: 0 1px 2px rgba(38,32,25,.14); }
-  .side-toggle button.sell.on { background: var(--raised); color: var(--down); box-shadow: 0 1px 2px rgba(38,32,25,.14); }
-  .btnrow { display: flex; gap: 8px; }
-  .btnrow input {
-    flex: 1; min-width: 80px; background: var(--raised); border: 1px solid var(--line);
-    border-radius: var(--r-sm); color: var(--ink); padding: 10px 12px; font: 600 13.5px/1 var(--mono);
-    outline: none; transition: border-color .15s ease;
-  }
-  .btnrow input::placeholder { color: var(--ink-3); font-weight: 400; }
-  .btnrow input:focus { border-color: var(--line-strong); }
-  .btn {
-    background: var(--up); color: #f4ecd8; border: 0; border-radius: var(--r-sm);
-    padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 13px;
-    transition: filter .15s ease;
-  }
-  [data-theme="night"] .btn { color: #142a1c; }
-  .btn:hover { filter: brightness(1.08); }
-  .btn.sec { background: var(--raised); color: var(--down); border: 1px solid var(--line); }
-  .btn.sec:hover { border-color: var(--down); filter: none; }
-  .btn:disabled { opacity: .4; cursor: default; }
-  .msg { font-size: 12px; color: var(--ink-2); min-height: 18px; margin-top: 10px; }
-  .msg.err { color: var(--down); } .msg.ok { color: var(--up); }
-  .conn { font-size: 12px; color: var(--ink-2); }
-  .conn b { color: var(--ink); font-family: var(--mono); font-weight: 600; }
-  .oref { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-3); padding: 5px 0; border-bottom: 1px dashed var(--line); }
-  .oref b { font-family: var(--mono); color: var(--ink-2); font-weight: 600; }
-  .livebar { font-size: 12px; line-height: 1.5; border-radius: var(--r-sm); padding: 8px 10px; margin: 0 0 12px; background: var(--sunk); color: var(--ink-2); }
-  .livebar.live { background: var(--down-soft); color: var(--down); }
-  .livebar.live b::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--down); margin-right: 6px; vertical-align: 1px; }
-  .livebar.soon { background: var(--gold-soft); color: var(--gold); }
-  .qorders { margin-top: 10px; }
-  .qorder { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); padding: 6px 0; border-bottom: 1px dashed var(--line); }
-  .qorder .mono { font-family: var(--mono); }
-  .feenote { font-size: 11px; color: var(--ink-3); margin-top: 10px; display: flex; justify-content: space-between; gap: 8px; }
-
-  footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; line-height: 1.7; display: flex; gap: 24px; justify-content: space-between; flex-wrap: wrap; }
-  footer a { text-decoration: underline; text-underline-offset: 3px; }
-  .empty { color: var(--ink-3); padding: 28px 18px; text-align: center; font-size: 13px; }
-
-  /* ---------- sub lede ---------- */
-  .sub { color: var(--ink-2); font-size: 13px; line-height: 1.6; margin: -12px 0 18px; max-width: 780px; }
-  .sub a { color: var(--up); font-weight: 600; }
-  .sub a:hover { text-decoration: underline; text-underline-offset: 3px; }
-
-  /* ---------- theme toggle ---------- */
-  #themeBtn .sun { display: none; }
-  #themeBtn .moon { display: block; }
-  [data-theme="night"] #themeBtn .sun { display: block; }
-  [data-theme="night"] #themeBtn .moon { display: none; }
-
-  /* ---------- profile ---------- */
-  .hero { text-align: center; padding: 64px 20px; }
-  .hero h2 { font: 600 26px/1.25 var(--sans); letter-spacing: -.02em; margin-bottom: 10px; }
-  .hero p { color: var(--ink-2); max-width: 470px; margin: 0 auto 24px; font-size: 13.5px; line-height: 1.65; }
-  .hero .cta { padding: 11px 26px; font-size: 13.5px; }
-  .pf-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  .pf-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--up); }
-  .pf-head .name { font-size: 14px; font-weight: 700; font-family: var(--mono); }
-  .pf-head .spacer { flex: 1; }
-  .pf-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
-  .pf-kv .cell { background: var(--raised); padding: 13px 18px; }
-  .pf-kv .cell .k { font: 500 10px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .7px; }
-  .pf-kv .cell .v { font: 600 16px/1.2 var(--mono); margin-top: 5px; font-variant-numeric: tabular-nums; }
-  .fills .px { font-family: var(--mono); color: var(--ink-2); width: 150px; text-align: right; flex: none; font-size: 11.5px; }
-  .fills .amt { font-family: var(--mono); width: 118px; text-align: right; flex: none; font-size: 12.5px; }
-  a.txlink { font-family: var(--mono); font-size: 11px; color: var(--ink-3); flex: none; }
-  a.txlink:hover { color: var(--up); }
-
-  /* ---------- connect modal ---------- */
-  .modal { position: fixed; inset: 0; background: rgba(38,32,25,.4); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: 50; }
-  [data-theme="night"] .modal { background: rgba(10,6,3,.72); }
-  .modal[hidden] { display: none; }
-  .modal-card {
-    width: 400px; max-width: calc(100vw - 32px); max-height: 82vh; overflow-y: auto;
-    background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg);
-    box-shadow: var(--shadow), 0 24px 64px rgba(38,32,25,.25);
-  }
-  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid var(--line); font: 600 14px/1 var(--sans); }
-  .modal-head .x { background: none; border: 0; color: var(--ink-3); font-size: 18px; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
-  .modal-head .x:hover { color: var(--ink); background: var(--sunk); }
-  .wrow {
-    display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 18px;
-    background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--ink);
-    cursor: pointer; text-align: left; font: 500 13.5px/1.3 var(--sans); transition: background .12s ease;
-  }
-  .wrow:last-child { border-bottom: 0; }
-  .wrow:hover { background: var(--sunk); }
-  .wrow img { width: 30px; height: 30px; border-radius: var(--r-sm); flex: none; }
-  .wrow .ph {
-    width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--sunk); border: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-weight: 700; flex: none;
-  }
-  .wrow .sub { color: var(--ink-3); font-size: 11px; font-weight: 400; margin-top: 1px; }
-  .wrow .arrow { margin-left: auto; color: var(--ink-3); }
-  .wsec { padding: 13px 18px 6px; color: var(--ink-3); font: 500 10.5px/1 var(--sans); text-transform: uppercase; letter-spacing: .7px; }
-
-  /* ---------- toasts ---------- */
-  #toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: 380px; }
-  .toast {
-    background: var(--ink); color: var(--paper); border-radius: var(--r-sm); padding: 11px 14px;
-    font-size: 12.5px; box-shadow: var(--shadow); animation: tin .2s ease;
-    border-left: 3px solid var(--tennis);
-  }
-  .toast.err { border-left-color: var(--down); }
-  .toast.ok { border-left-color: var(--up); }
-  [data-theme="night"] .toast { background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--tennis); }
-  @keyframes tin { from { transform: translateY(8px); opacity: 0; } }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
-  }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="brand" onclick="showMarket()">
-      <span class="mark" aria-hidden="true"></span>
-      <h1>FSPI<em>tennis index</em></h1>
+  <nav>
+    <a class="brand" href="/"><span class="ball" aria-hidden="true"></span>Courtline</a>
+    <div class="links">
+      <a href="/docs">Methodology</a>
+      <a class="btn sm" href="/market">Open market</a>
     </div>
-    <span class="badge" id="chainBadge">Chiliz Spicy · 88882</span>
-    <span class="badge gold" id="seasonBadge" title="">season</span>
-    <span class="spacer"></span>
-    <a class="navlink" href="/docs">Docs</a>
-    <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Toggle night mode" title="Toggle night mode">
-      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-    </button>
-    <button class="ghost" id="pfBtn" style="display:none" onclick="showProfile()">Portfolio &amp; PnL</button>
-    <div class="chip" id="walletChip" onclick="showProfile()" title="Open portfolio"><span class="dot" id="chainDot"></span><span class="addr" id="chipAddr"></span><span class="bal" id="chipBal"></span></div>
-    <button class="cta" id="connectBtn" onclick="openConnect()">Connect Wallet</button>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <h1>Trade a player's <mark>form</mark>.</h1>
+      <p class="lede">Every top men's and women's player has a token. When they win, the price goes up. When they lose, it goes down. You can buy or sell at any time.</p>
+      <div class="cta">
+        <a class="btn" href="/market">Open the market</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+    </div>
+
+    <div class="card" aria-label="Current market leader">
+      <div class="top">
+        <div>
+          <div class="who" id="lead-name">Zheng Qinwen</div>
+          <div class="sym" id="lead-sym">W-QIN</div>
+        </div>
+        <div class="price"><b id="lead-price">108.09</b><span class="chg" id="lead-chg">+8.1% this season</span></div>
+      </div>
+      <svg class="chart" id="chart" viewBox="0 0 520 170" role="img" aria-label="Price of the current leader this season"></svg>
+      <div class="rows" id="rows"></div>
+      <div class="foot" id="card-foot">Price in CHZ · season data to 18 Oct 2026</div>
+    </div>
   </header>
-  <p class="sub">Per-player performance tokens backed 1:1 by CHZ reserves, priced off a season level that moves on <b>surprise</b> — an upset pays more than an expected win. Every move is retraceable to the match that caused it. <a href="/docs">Read the methodology →</a></p>
+</div>
 
-  <div class="stats" id="stats"></div>
-
-  <div class="toolbar" id="marketTools">
-    <div class="tabs">
-      <button id="tabAtp" class="on" onclick="setTour('atp')">ATP</button>
-      <button id="tabWta" onclick="setTour('wta')">WTA</button>
-    </div>
-    <input class="search" id="search" placeholder="Search player or symbol…" oninput="render()">
-    <span class="hint" id="rowCount"></span>
-  </div>
-
-  <div class="grid" id="grid">
-    <div class="panel">
-      <div class="tablecap">Ranked by season level — how far each player has moved beyond expectation, not their world ranking.</div>
-      <div class="tablewrap">
-        <table>
-          <thead><tr>
-            <th>#</th><th>Player</th><th class="num" onclick="sortBy('level')" title="7,500 + season points. Points scale with surprise.">Level</th>
-            <th class="num" onclick="sortBy('d1')">Δ 1d</th><th class="num" onclick="sortBy('d7')">Δ 7d</th>
-            <th>Trend</th><th class="num" onclick="sortBy('nav')">NAV</th><th>Token</th>
-          </tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
+<div class="wrap">
+  <section id="how">
+    <div class="steps">
+      <div class="step">
+        <h3>Pick a player</h3>
+        <p>Each token starts the season at 100 CHZ. Buy the players you rate, or spread across the tour.</p>
+        <div class="eg">Example: buy at <b>100.00</b><br>50 CHZ → <b>0.50</b> tokens</div>
       </div>
-      <div class="empty" id="emptyMsg" hidden><span class="skl" style="width:70%"></span><br><br>Loading index…</div>
-    </div>
-  </div>
-
-  <div id="profileView" style="display:none">
-    <div class="panel" id="pfPanel">
-      <div class="hero" id="pfHero">
-        <h2>Own a piece of the ranking.</h2>
-        <p>Track your CHZ balance, player-token holdings and profit &amp; loss. Your fills are read straight from the chain — every buy and sell you've ever made on these tokens counts toward your PnL.</p>
-        <button class="cta" onclick="openConnect()">Connect Wallet</button>
+      <div class="step">
+        <h3>Results move the price</h3>
+        <p>An upset moves the price more than an expected win, and big events count more than small ones.</p>
+        <div class="eg" id="eg-lead">W-QIN this season:<br><b>100.00</b> → <span class="up">108.09</span> CHZ</div>
+      </div>
+      <div class="step">
+        <h3>Sell whenever you like</h3>
+        <p>A pool sits on the other side of every trade, so you never wait for another buyer.</p>
+        <div class="eg">Example: sell 0.50 at <b>105.00</b><br>52.50 CHZ, less the 1% fee</div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="modal" id="connectModal" hidden>
-    <div class="modal-card">
-      <div class="modal-head"><span>Connect a wallet</span><button class="x" onclick="closeConnect()">×</button></div>
-      <div id="walletList"></div>
-      <div class="wsec">Popular wallets (not detected — install)</div>
-      <div id="installList"></div>
+  <section>
+    <h2>Fair while matches are on</h2>
+    <div class="pair">
+      <div class="item">
+        <h3>Trading pauses during a match</h3>
+        <p>When a player walks on court, their token pauses. Orders placed meanwhile are queued and filled at the price after the final point.</p>
+      </div>
+      <div class="item">
+        <h3>Backed by a funded pool</h3>
+        <p>The pool adds CHZ behind each token as its price rises, and buys are never priced above what a token's reserve holds.</p>
+      </div>
     </div>
-  </div>
-  <div id="toasts"></div>
+  </section>
+
+  <section>
+    <div class="facts">
+      <div class="fact"><b id="f-players">197</b><span>players with a token</span></div>
+      <div class="fact"><b>100</b><span>CHZ starting price</span></div>
+      <div class="fact"><b id="f-fee">1%</b><span>fee on each buy and sell</span></div>
+      <div class="fact"><b id="f-matches">2,525</b><span>matches scored this season</span></div>
+    </div>
+  </section>
+
+  <section class="final">
+    <h2>See where the prices are today</h2>
+    <div class="cta"><a class="btn" href="/market">Open the market</a><a class="btn ghost" href="/docs">Read the methodology</a></div>
+  </section>
 
   <footer>
-    <div class="ft">
-      <b>Methodology.</b> Every match is a zero-sum transfer sized by surprise: pre-match ratings give an expected win probability, the winner takes 200 × (1 − p) × tier × round and the loser gives the same. A favourite's expected win barely moves the level; an upset moves it a lot. Set and game margin adds a small zero-sum adjustment; milestones are surprise-scaled and are the only new points. Every level change is retraceable to its matches.
-    </div>
-    <div class="ft">
-      <b>Reserve model.</b> Tokens mint/burn at NAV = reserve/supply; the core tops up rising NAVs and sweeps falling ones, so tokens stay fully CHZ-backed. Trading fees (1%/1%) fund the core reserve. Intraday values are indicative; the Official Daily Close is the settlement print. Data: ESPN · Chain: Chiliz Spicy testnet (88882). Not financial advice.
-    </div>
+    <p>Courtline is an independent demo on Chiliz Spicy testnet. It is not affiliated with, endorsed by or licensed by the ATP, the WTA, any player or any data provider. Player names only identify whose public match results a token follows. Test tokens have no value, and nothing here is financial advice.</p>
+    <p class="mono">Core contract 0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d</p>
   </footer>
 </div>
 
 <script>
-const SEL = {
-  navWad: "0xd09074c0", totalSupply: "0x18160ddd", reserveWad: "0xe9669822",
-  buy: "0xcce7ec13", sell: "0x67cdf6c9", balanceOf: "0x70a08231",
-  // live-match queue
-  tradeStatus: "0xc229550c", haltFrom: "0xfb3e7511", epoch: "0x900cf0cf",
-  orders: "0xbc908963", claim: "0x1790c562",
-};
-const CORE = "0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d"; // TennisIndex core (oracle/state/deployments.json)
-const RPC = "https://spicy-rpc.chiliz.com";
-const CHAIN_ID_HEX = "0x15b32"; // 88882 = Chiliz Spicy testnet
-const CHAIN_NAME = "Chiliz Spicy Testnet";
-const EXPLORER = "https://spicy.chiliscan.com";
-
-let registry = null, levels = null, history = null;
-let tour = "atp", sel = null, sortKey = "level", sortDir = -1;
-let tokenCache = new Map();
-
-const $ = (id) => document.getElementById(id);
-const fmt = (cp2dp) => (cp2dp / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const wei = (hex) => BigInt(hex);
-const eth = (weiVal, d = 4) => (Number(weiVal) / 1e18).toFixed(d);
-const esc = (s) => (s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-async function rpc(method, params) {
-  const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.result;
-}
-async function ethCall(to, data) { return await rpc("eth_call", [{ to, data }, "latest"]); }
-
-async function loadAll() {
-  const [r, l, h] = await Promise.all([
-    fetch("/api/registry").then((x) => x.json()),
-    fetch("/api/levels").then((x) => x.json()),
-    fetch("/api/history").then((x) => x.json()),
-  ]);
-  registry = r; levels = l; history = h;
-  $("seasonBadge").textContent = `Season ${new Date(l.seasonStart ?? Date.now()).getFullYear()} · tracking since ${(l.seasonStart ?? "—")}`;
-}
-
-function rowsFor(t) {
-  const out = [];
-  for (const [id, v] of Object.entries(levels.players ?? {})) {
-    if (v.tour !== t) continue;
-    const reg = registry.byId?.[id];
-    out.push({ id, name: v.name, level: v.level2dp, cp: v.cp, reg });
-  }
-  return out;
-}
-
-function dayLevels(id) {
-  const arr = [];
-  for (const d of history.days ?? []) { const v = d.lv[id]; if (v !== undefined) arr.push([d.d, v]); }
-  return arr;
-}
-
-function deltas(id) {
-  const series = dayLevels(id);
-  const n = series.length;
-  if (n === 0) return { d1: null, d7: null, series };
-  const last = series[n - 1][1];
-  const at = (back) => (n - 1 - back >= 0 ? series[n - 1 - back][1] : null);
-  return { d1: at(1) === null ? null : last - at(1), d7: at(7) === null ? null : last - at(7), series };
-}
-
-function spark(series, w = 92, h = 26) {
-  if (series.length < 2) return "";
-  const vals = series.slice(-45).map((x) => x[1]);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = Math.max(max - min, 1);
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 2 - ((v - min) / span) * (h - 4)).toFixed(1)}`);
-  const last = vals[vals.length - 1], first = vals[0];
-  const col = last >= first ? "var(--up)" : "var(--down)";
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="${col}" stroke-width="1.5" points="${pts.join(" ")}"/></svg>`;
-}
-
-async function tokenStats(token) {
-  if (!token) return null;
-  if (tokenCache.has(token)) return tokenCache.get(token);
-  try {
-    const [nav, sup] = await Promise.all([
-      ethCall(token, SEL.navWad), ethCall(token, SEL.totalSupply),
-    ]);
-    const t = { nav: BigInt(nav), sup: BigInt(sup) };
-    tokenCache.set(token, t);
-    return t;
-  } catch { return null; }
-}
-
-function fmtDelta(d) {
-  if (d === null) return `<span class="flat">—</span>`;
-  const v = d / 100;
-  const cls = v > 0 ? "up" : v < 0 ? "down" : "flat";
-  return `<span class="delta ${cls}">${v > 0 ? "+" : ""}${v.toFixed(2)}</span>`;
-}
-
-let viewRows = [];
-async function render() {
-  const q = ($("search").value || "").toLowerCase();
-  let rows = rowsFor(tour);
-  if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.reg?.symbol || "").toLowerCase().includes(q));
-  const withD = rows.map((r) => ({ ...r, ...deltas(r.id) }));
-  const sorters = {
-    level: (a, b) => a.level - b.level,
-    d1: (a, b) => (a.d1 ?? -1e9) - (b.d1 ?? -1e9),
-    d7: (a, b) => (a.d7 ?? -1e9) - (b.d7 ?? -1e9),
+  // Snapshot shown at once; replaced by live data when the API answers.
+  const SNAPSHOT = {
+    lead: { name: "Zheng Qinwen", sym: "W-QIN", series: [100.15,100.21,99.78,99.78,99.78,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.58,99.99,101.29,102.85,102.36,102.36,102.36,102.36,102.36,102.36,102.36,102.41,103.27,103.73,108.09,108.09,108.09] },
+    from: "2026-07-01", to: "2026-10-18",
+    top: [
+      { name: "Linda Noskova", sym: "W-NOS", price: 106.30 },
+      { name: "Coco Gauff", sym: "W-GAU", price: 105.91 },
+      { name: "Alejandro Davidovich Fokina", sym: "M-FOK", price: 105.84 },
+    ],
   };
-  withD.sort((a, b) => (sorters[sortKey] ? sorters[sortKey](a, b) * sortDir : a.level - b.level));
-  viewRows = withD;
+  const BASE = 7500, PRICE_AT_BASE = 100;
+  const priceOf = (level) => (PRICE_AT_BASE * level) / BASE;
+  const pct = (p) => `${p >= PRICE_AT_BASE ? "+" : "−"}${Math.abs((p / PRICE_AT_BASE - 1) * 100).toFixed(1)}%`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
-  // Paint the table first with cached / level-implied NAV, then fill token stats.
-  const visible = withD.slice(0, 40);
-  for (const r of visible) r.tk = r.reg?.token ? tokenCache.get(r.reg.token) : null;
-
-  $("rowCount").textContent = `${withD.length} player${withD.length === 1 ? "" : "s"}`;
-  $("emptyMsg").hidden = withD.length > 0;
-  $("tbody").innerHTML = visible.map((r, i) => `
-    <tr class="row${sel === r.id ? " sel" : ""}" onclick="select('${r.id}')">
-      <td class="rk">${String(i + 1).padStart(2, "0")}</td>
-      <td class="nm">${esc(r.name)} <span class="tok">${r.reg?.symbol ?? ""}</span></td>
-      <td class="num lv">${fmt(r.level)}</td>
-      <td class="num">${fmtDelta(r.d1)}</td>
-      <td class="num">${fmtDelta(r.d7)}</td>
-      <td>${spark(r.series)}</td>
-      <td class="num" data-token="${r.reg?.token ?? ""}">${r.tk ? (r.tk.sup > 0n ? eth(r.tk.nav, 2) : (r.level / 7500).toFixed(2)) : (r.reg?.token ? (r.level / 7500).toFixed(2) : `<span class="tok">—</span>`)}</td>
-      <td>${r.reg?.token ? `<span class="tok-pill">LIVE</span>` : `<span class="tok none">soon</span>`}</td>
-    </tr>`).join("") + (withD.length > 40
-      ? `<tr class="more-row"><td colspan="8">…and ${withD.length - 40} more (search to narrow)</td></tr>` : "");
-
-  Promise.all(visible.map(async (r) => {
-    if (!r.reg?.token || r.tk) return;
-    const tk = await tokenStats(r.reg.token);
-    if (!tk) return;
-    const cell = document.querySelector(`td[data-token="${r.reg.token}"]`);
-    if (cell) cell.textContent = tk.sup > 0n ? eth(tk.nav, 2) : (r.level / 7500).toFixed(2);
-  })).catch(() => {});
-}
-
-function setTour(t) {
-  tour = t; sel = null;
-  $("tabAtp").classList.toggle("on", t === "atp");
-  $("tabWta").classList.toggle("on", t === "wta");
-  const d = $("detail");
-  if (d) d.remove();
-  $("grid").classList.remove("with-detail");
-  render();
-}
-function sortBy(k) {
-  if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = -1; }
-  render();
-}
-
-async function select(id) {
-  sel = id;
-  render();
-  showDetail(id);
-}
-
-function chart(series, marks) {
-  if (series.length < 2) return `<div class="empty">Not enough history yet.</div>`;
-  const W = 520, H = 170, PL = 26, PR = 48;
-  const vals = series.map((x) => x[1]);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = Math.max(max - min, 100);
-  const lo = min - span * 0.08, hi = max + span * 0.08;
-  const X = (i) => PL + (i / (vals.length - 1)) * (W - PL - PR);
-  const Y = (v) => H - 26 - ((v - lo) / (hi - lo)) * (H - 52);
-  const pts = vals.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`);
-  const line = pts.join(" ");
-  const area = `M ${PL},${H - 26} L ${line.split(" ").join(" L ")} L ${X(vals.length - 1)},${H - 26} Z`;
-  const gridY = [0, .5, 1].map((f) => { const v = lo + f * (hi - lo); return `<line x1="${PL}" y1="${Y(v)}" x2="${W - PR}" y2="${Y(v)}" stroke="var(--line)"/><text x="${W - PR + 4}" y="${Y(v) + 4}" fill="var(--ink-3)" font-size="10" font-family="var(--mono)">${(v / 100).toFixed(0)}</text>`; }).join("");
-  const mks = (marks ?? []).map((m) => {
-    const i = series.findIndex((s) => s[0] >= m.date);
-    if (i < 0) return "";
-    const y = Y(series[Math.min(i, series.length - 1)][1]);
-    const col = m.type === "TITLE" ? "var(--gold)" : "var(--ink-2)";
-    return `<circle cx="${X(i)}" cy="${y}" r="3.5" fill="${col}" stroke="var(--raised)"/>`;
-  }).join("");
-  const xlab = series.map((s, i) => i % 14 === 0 ? `<text x="${X(i)}" y="${H - 8}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${s[0].slice(5)}</text>` : "").join("");
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">
-    ${gridY}
-    <path d="${area}" fill="var(--chart-fill)"/>
-    <polyline fill="none" stroke="var(--chart)" stroke-width="1.8" points="${line}"/>
-    ${mks}${xlab}
-  </svg>`;
-}
-
-function milestoneOf(row) {
-  if (row.t !== "milestone") return null;
-  if (row.w) return "TITLE";
-  if (row.r === "F") return "FINAL";
-  return row.r; // SF / QF
-}
-
-async function showDetail(id) {
-  const v = levels.players?.[id];
-  const reg = registry.byId?.[id];
-  const h = history.players?.[id] ?? { rows: [] };
-  const { d1, d7, series } = deltas(id);
-  const marks = h.rows.filter((r) => r.t === "milestone" && (r.w || r.r === "F")).map((r) => ({ date: r.d, type: r.w ? "TITLE" : "FINAL" }));
-  const wins = h.rows.filter((r) => r.t === "match" && r.res === "W").length;
-  const losses = h.rows.filter((r) => r.t === "match" && r.res === "L").length;
-  const peak = Math.max(...series.map((s) => s[1]), v?.level2dp ?? 0);
-
-  const grid = $("grid");
-  grid.classList.add("with-detail");
-  let existing = $("detail");
-  if (!existing) {
-    existing = document.createElement("div");
-    existing.className = "panel detail"; existing.id = "detail";
-    grid.appendChild(existing);
+  function drawChart(s, from, to) {
+    const W = 520, H = 170, L = 18, R = 44, T = 14, B = 26;
+    const min = Math.min(...s, PRICE_AT_BASE), max = Math.max(...s, PRICE_AT_BASE);
+    const lo = Math.floor((min - 1) / 5) * 5, hi = Math.ceil((max + 1) / 5) * 5;
+    const x = (i) => L + ((W - L - R) * i) / Math.max(1, s.length - 1);
+    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    const line = s.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+    const area = `${line} L${x(s.length - 1).toFixed(1)} ${H - B} L${L} ${H - B} Z`;
+    const ticks = [];
+    for (let v = lo; v <= hi; v += 5) ticks.push(v);
+    const grid = ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="${v === PRICE_AT_BASE ? "0" : "2 4"}"/><text x="${W - R + 6}" y="${y(v) + 3}">${v}</text>`).join("");
+    const end = s[s.length - 1];
+    document.getElementById("chart").innerHTML = grid +
+      `<path d="${area}" fill="var(--chart-fill)"/>` +
+      `<path d="${line}" fill="none" stroke="var(--chart)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<circle cx="${x(s.length - 1)}" cy="${y(end)}" r="4.5" fill="var(--chart)" stroke="var(--raised)" stroke-width="2"/>` +
+      `<text x="${L}" y="${H - 8}">${day(from)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end">${day(to)}</text>`;
   }
 
-  const feed = h.rows.slice().reverse().slice(0, 40).map((r) => {
-    const d = (r.d ?? "").slice(5);
-    if (r.t === "milestone") {
-      const lab = r.w ? "TITLE" : r.r === "F" ? "RUNNER-UP" : r.r;
-      const exp = r.p !== undefined ? ` · <span class="exp">decisive expectation <b>${Math.round(r.p * 100)}%</b></span>` : "";
-      return `<div class="ev"><span class="d">${d}</span><span class="m"><div class="l1"><span class="tag mil">${lab}</span><span style="color:var(--ink-3)">${r.tier}</span></div><div class="l2">${esc(r.n ?? "")}${exp}</div></span><span class="cp up">+${(r.cp / 100).toFixed(2)}</span><span class="lvafter">${(r.lv / 100).toFixed(2)}</span></div>`;
-    }
-    const cls = r.res === "W" ? "win" : "loss";
-    const exp = r.p !== undefined ? ` · <span class="exp">expected <b>${Math.round(r.p * 100)}%</b>${r.res === "W" && r.p < 0.5 ? " · upset" : ""}</span>` : "";
-    return `<div class="ev"><span class="d">${d}</span><span class="m"><div class="l1"><span class="tag ${r.tier === "GS" ? "gs" : ""}">${r.tier}</span><span class="tag ${cls}">${r.res}</span>${esc(r.r)} vs <b>${esc(r.opp ?? "?")}</b>${r.sc ? ` <span style="color:var(--ink-3)">${esc(r.sc)}</span>` : ""}</div><div class="l2">${esc(r.n ?? "")}${exp}</div></span><span class="cp ${cls}">${r.cp >= 0 ? "+" : ""}${(r.cp / 100).toFixed(2)}</span><span class="lvafter">${(r.lv / 100).toFixed(2)}</span></div>`;
-  }).join("");
-
-  existing.innerHTML = `
-    <div class="head">
-      <div class="name">${esc(v?.name ?? reg?.name ?? id)}</div>
-      <div class="meta">${reg?.symbol ?? ""} · ${reg?.token ? `<span class="tokaddr">${reg.token}</span>` : "no token"} · <span id="walletAddr" class="conn"></span></div>
-    </div>
-    <div class="kv">
-      <div><div class="k">Level</div><div class="v acc">${fmt(v?.level2dp ?? 0)}</div></div>
-      <div><div class="k">Δ 1d / 7d</div><div class="v">${fmtDelta(d1)} / ${fmtDelta(d7)}</div></div>
-      <div><div class="k">Season peak</div><div class="v">${fmt(peak)}</div></div>
-      <div><div class="k">W–L (tracked)</div><div class="v">${wins}–${losses}</div></div>
-    </div>
-    <div class="chartbox">${chart(series, marks)}</div>
-    <h2>Retraceable trail — every point, the match and the expectation</h2>
-    <div class="feednote">Points scale with surprise — the lower the pre-match expectation, the bigger the move.</div>
-    <div class="feed">${feed || `<div class="empty">No tracked matches since season start.</div>`}</div>
-    ${reg?.token ? tokenPanelHtml(reg) : `<div class="tokenbox"><div class="empty">No token deployed yet — this player is tracked on the index and becomes tradeable in a future registration batch.</div></div>`}
-  `;
-  if (reg?.token) await refreshTokenPanel(reg);
-}
-
-function tokenPanelHtml(reg) {
-  return `
-    <div class="tokenbox" id="tokenPanel">
-      <div class="order-sym-row">
-        <span class="toksym">${reg.symbol}</span>
-        <span class="tokaddr">${reg.token}</span>
-        <span class="conn" id="tokStats"></span>
-      </div>
-      <div class="navbig" id="navBig">— <small>NAV / token</small></div>
-      <div class="navsub" id="navSub">loading token state…</div>
-      <div class="livebar" id="liveBar" hidden></div>
-      <div class="side-toggle">
-        <button id="sideBuy" class="buy on" onclick="setSide('buy')">Buy</button>
-        <button id="sideSell" class="sell" onclick="setSide('sell')">Sell</button>
-      </div>
-      <div class="btnrow" id="orderRow">
-        <input id="orderAmt" placeholder="CHZ to spend" inputmode="decimal" aria-label="Order amount">
-        <button class="btn" id="orderBtn" onclick="submitOrder('${reg.token}')">Buy</button>
-      </div>
-      <div class="msg" id="tokMsg"></div>
-      <div class="qorders" id="myOrders"></div>
-      <div class="oref"><span>wallet</span><b id="walletBal">—</b></div>
-      <div class="oref"><span>holdings</span><b id="holdBal">—</b></div>
-      <div class="feenote"><span>Fee 1% per side → core reserve</span><span>Slippage guard 2%</span></div>
-    </div>`;
-}
-
-let orderSide = "buy";
-let tokenQueued = false; // the open token's player is in a live match: orders queue
-function setSide(s, keepAmount = false) {
-  orderSide = s;
-  $("sideBuy").classList.toggle("on", s === "buy");
-  $("sideSell").classList.toggle("on", s === "sell");
-  const inp = $("orderAmt"), btn = $("orderBtn");
-  const verb = s === "buy" ? "Buy" : "Sell";
-  if (s === "buy") { inp.placeholder = "CHZ to spend"; inp.setAttribute("aria-label", "CHZ to spend"); btn.className = "btn"; }
-  else { inp.placeholder = "Tokens to sell"; inp.setAttribute("aria-label", "Tokens to sell"); btn.className = "btn sec"; }
-  btn.textContent = tokenQueued ? `Queue ${verb.toLowerCase()}` : verb;
-  if (!keepAmount) inp.value = "";
-}
-
-/// Live-match state from the core: 0 open, 1 live (queue), 2 paused, 3 oracle offline.
-async function renderLiveBar(token) {
-  const bar = $("liveBar");
-  if (!bar) return;
-  let st = 0, from = 0;
-  try {
-    const pad = token.slice(2).toLowerCase().padStart(64, "0");
-    const [a, b] = await Promise.all([ethCall(CORE, SEL.tradeStatus + pad), ethCall(CORE, SEL.haltFrom + pad)]);
-    st = Number(BigInt(a));
-    from = Number(BigInt(b));
-  } catch { bar.hidden = true; return; } // pre-queue core: no live state to show
-  const nowS = Date.now() / 1000;
-  const hhmm = (t) => new Date(t * 1000).toISOString().slice(11, 16) + " UTC";
-  tokenQueued = st === 1;
-  bar.className = "livebar";
-  bar.hidden = false;
-  if (st === 1) {
-    bar.classList.add("live");
-    bar.innerHTML = `<b>Live match.</b> Orders queue and fill at the post-match price once the result posts. Queued orders can't be cancelled.`;
-  } else if (st === 2) {
-    bar.innerHTML = `<b>Trading paused.</b>`;
-  } else if (st === 3) {
-    bar.innerHTML = `<b>Trading paused:</b> the results feed is offline. Trading resumes when it reconnects.`;
-  } else if (from > nowS) {
-    bar.classList.add("soon");
-    bar.innerHTML = `<b>Match today.</b> From ${hhmm(from)} orders queue until the result posts.`;
-  } else {
-    bar.hidden = true;
+  function render(d) {
+    const s = d.lead.series, end = s[s.length - 1];
+    document.getElementById("lead-name").textContent = d.lead.name;
+    document.getElementById("lead-sym").textContent = d.lead.sym;
+    document.getElementById("lead-price").textContent = end.toFixed(2);
+    const chg = document.getElementById("lead-chg");
+    chg.textContent = `${pct(end)} this season`;
+    chg.classList.toggle("neg", end < PRICE_AT_BASE);
+    document.getElementById("chart").setAttribute("aria-label", `Price of ${d.lead.sym} this season, from ${PRICE_AT_BASE} to ${end.toFixed(2)} CHZ`);
+    drawChart(s, d.from, d.to);
+    document.getElementById("rows").innerHTML = d.top.map((r) =>
+      `<div class="row"><span class="n">${esc(r.name)}<span>${esc(r.sym)}</span></span><span class="p">${r.price.toFixed(2)}</span><span class="chg${r.price < PRICE_AT_BASE ? " neg" : ""}">${pct(r.price)}</span></div>`).join("");
+    document.getElementById("card-foot").textContent = `Price in CHZ · season data to ${day(d.to)} ${d.to.slice(0, 4)}`;
+    document.getElementById("eg-lead").innerHTML = `${esc(d.lead.sym)} this season:<br><b>${PRICE_AT_BASE.toFixed(2)}</b> → <span class="up">${end.toFixed(2)}</span> CHZ`;
   }
-  setSide(orderSide, true);
-}
+  render(SNAPSHOT);
 
-/// The connected wallet's queued orders on this token (recent batches).
-async function renderMyOrders(token, acc) {
-  const box = $("myOrders");
-  if (!box) return;
-  let html = "";
-  try {
-    const e = Number(BigInt(await ethCall(token, SEL.epoch)));
-    const epochs = [];
-    for (let k = Math.max(0, e - 9); k <= e; k++) epochs.push(k);
-    const rows = await Promise.all(epochs.map(async (k) => {
-      const out = await ethCall(token, SEL.orders + k.toString(16).padStart(64, "0") + acc.slice(2).toLowerCase().padStart(64, "0"));
-      const w = out.slice(2).match(/.{64}/g).map((x) => BigInt("0x" + x));
-      return { epoch: k, buyChz: w[1], sellTokens: w[2] };
-    }));
-    for (const r of rows) {
-      if (r.buyChz === 0n && r.sellTokens === 0n) continue;
-      const what = [r.buyChz > 0n ? `buy ${eth(r.buyChz, 4)} CHZ` : "", r.sellTokens > 0n ? `sell ${eth(r.sellTokens, 6)} tokens` : ""].filter(Boolean).join(" + ");
-      const ready = r.epoch < e; // batches below the open one are settled
-      html += `<div class="qorder"><span>Queued: <span class="mono">${what}</span></span>${ready
-        ? `<button class="ghost" onclick="claimOrder('${token}', ${r.epoch})">Claim fill</button>`
-        : `<span>fills after the result</span>`}</div>`;
-    }
-  } catch {}
-  box.innerHTML = html;
-}
-
-async function claimOrder(token, epoch) {
-  const msg = $("tokMsg");
-  try {
-    const acc = await ensureChain();
-    const data = SEL.claim + epoch.toString(16).padStart(64, "0") + acc.slice(2).toLowerCase().padStart(64, "0");
-    const tx = await pv().request({ method: "eth_sendTransaction", params: [{ from: acc, to: token, value: "0x0", data }] });
-    if (msg) { msg.className = "msg ok"; msg.textContent = `Claim sent: ${tx.slice(0, 10)}…`; }
-    else toast(`Claim sent: ${tx.slice(0, 10)}…`);
-    tokenCache.delete(token);
-    setTimeout(async () => {
-      await updateWalletUi();
-      if (view === "profile") await loadPortfolio();
-      else if ($("myOrders")) refreshTokenPanel({ token });
-    }, 12000);
-  } catch (e) {
-    const t = (e.message ?? "failed").slice(0, 160);
-    if (msg) { msg.className = "msg err"; msg.textContent = t; } else toast(t, "err");
-  }
-}
-
-function setAmt(v) {
-  const inp = $("orderAmt");
-  if (!inp) return;
-  if (orderSide === "sell") {
-    const h = parseFloat(($("holdBal")?.textContent ?? "").replace(/[^\d.]/g, ""));
-    if (!h) { toast("Connect your wallet to load holdings first.", "err"); return; }
-    if (v === "max") inp.value = String(h);
-    else if (v.endsWith("%")) inp.value = (h * parseFloat(v) / 100).toFixed(4);
-    return;
-  }
-  inp.value = v;
-  inp.focus();
-}
-
-async function submitOrder(token) {
-  if (orderSide === "buy") await doBuy(token); else await doSell(token);
-}
-
-function pv() { return activeProvider ?? window.ethereum ?? null; }
-
-async function ensureChain(prov) {
-  const p = prov ?? pv();
-  if (!p) throw new Error("No wallet found. Click Connect to pick one.");
-  const cid = await p.request({ method: "eth_chainId" });
-  if (cid.toLowerCase() !== CHAIN_ID_HEX) {
-    try {
-      await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID_HEX }] });
-    } catch (e) {
-      if (e.code === 4902 || e.code === -32603) {
-        await p.request({
-          method: "wallet_addEthereumChain",
-          params: [{ chainId: CHAIN_ID_HEX, chainName: CHAIN_NAME, nativeCurrency: { name: "CHZ", symbol: "CHZ", decimals: 18 }, rpcUrls: [RPC], blockExplorerUrls: [EXPLORER] }],
-        });
-      } else throw e;
-    }
-  }
-  const accs = await p.request({ method: "eth_requestAccounts" });
-  if (!accs || !accs[0]) throw new Error("No account authorized.");
-  return accs[0];
-}
-
-async function refreshTokenPanel(reg) {
-  try {
-    const [nav, sup, res] = await Promise.all([
-      ethCall(reg.token, SEL.navWad), ethCall(reg.token, SEL.totalSupply), ethCall(reg.token, SEL.reserveWad),
-    ]);
-    const s = BigInt(sup), n = BigInt(nav);
-    const stats = $("tokStats");
-    if (stats) stats.textContent = `supply ${eth(s, 4)} · reserve ${eth(BigInt(res), 2)} CHZ`;
-    const navBig = $("navBig");
-    if (navBig) navBig.innerHTML = `${eth(n, 4)} <small>NAV / token</small>`;
-    await renderLiveBar(reg.token);
-    const navSub = $("navSub");
-    if (navSub) navSub.textContent = s > 0n
-      ? `NAV = reserve ÷ supply · price pins to level-implied value`
-      : `No supply yet — first buyer sets the pool at this NAV`;
-    // wallet
-    const p = pv();
-    if (p) {
-      try {
-        const acc = (await p.request({ method: "eth_accounts" }))[0];
-        if (acc) {
-          $("walletAddr").textContent = acc.slice(0, 6) + "…" + acc.slice(-4);
-          const [bal, hold] = await Promise.all([
-            rpc("eth_getBalance", [acc, "latest"]),
-            ethCall(reg.token, SEL.balanceOf + acc.slice(2).toLowerCase().padStart(64, "0")),
-          ]);
-          $("walletBal").textContent = eth(BigInt(bal), 3) + " CHZ";
-          $("holdBal").textContent = eth(BigInt(hold), 6) + " " + reg.symbol;
-          await renderMyOrders(reg.token, acc);
-        }
-      } catch {}
-    }
-  } catch (e) { const el = $("tokStats"); if (el) el.textContent = "on-chain read failed"; }
-}
-
-function toWei(amount) {
-  // exact decimal -> wei (Number() would round 18-decimal amounts)
-  const m = String(amount).trim().match(/^(\d*)(?:\.(\d*))?$/);
-  if (!m || (!m[1] && !m[2])) return null;
-  const v = BigInt(m[1] || "0") * 10n ** 18n + BigInt(((m[2] || "") + "0".repeat(18)).slice(0, 18));
-  return v > 0n ? v : null;
-}
-function toU256(hexStr) { return hexStr.slice(2).padStart(64, "0"); }
-
-async function doBuy(token) {
-  const msg = $("tokMsg");
-  try {
-    const amt = $("orderAmt").value.trim();
-    const value = toWei(amt);
-    if (!value) throw new Error("Enter a CHZ amount.");
-    const nav = BigInt(await ethCall(token, SEL.navWad));
-    const minOut = (value * 98n) / nav; // 2% slippage guard (token wei; value and nav both 1e18-scaled)
-    const acc = await ensureChain();
-    const data = SEL.buy + toU256(acc) + toU256("0x" + minOut.toString(16));
-    const tx = await pv().request({
-      method: "eth_sendTransaction",
-      params: [{ from: acc, to: token, value: "0x" + value.toString(16), data }],
-    });
-    msg.className = "msg ok";
-    msg.textContent = tokenQueued
-      ? `Queued (tx ${tx.slice(0, 10)}…). It fills at the post-match price; claim it here after the result posts.`
-      : `Sent tx ${tx.slice(0, 10)}… — NAV pins near ${eth(nav, 2)} CHZ per token.`;
-    tokenCache.delete(token);
-    await updateWalletUi();
-    if (view === "profile") await loadPortfolio();
-    else setTimeout(() => refreshTokenPanel({ token }), 15000);
-  } catch (e) { msg.className = "msg err"; msg.textContent = (e.message ?? "failed").slice(0, 160); }
-}
-
-async function doSell(token) {
-  const msg = $("tokMsg");
-  try {
-    const amt = $("orderAmt").value.trim();
-    const amtW = toWei(amt);
-    if (!amtW) throw new Error("Enter a token amount.");
-    const acc = await ensureChain();
-    const nav = BigInt(await ethCall(token, SEL.navWad));
-    const minChz = (amtW * nav * 98n) / 100n / 10n ** 18n; // 2% slippage guard
-    const data = SEL.sell + toU256("0x" + amtW.toString(16)) + toU256("0x" + acc.slice(2).toLowerCase().padStart(64, "0")) + toU256("0x" + minChz.toString(16));
-    const tx = await pv().request({
-      method: "eth_sendTransaction",
-      params: [{ from: acc, to: token, value: "0x0", data }],
-    });
-    msg.className = "msg ok";
-    msg.textContent = tokenQueued
-      ? `Sell queued (tx ${tx.slice(0, 10)}…). It fills at the post-match price; claim the CHZ here after the result posts.`
-      : `Sell sent: ${tx.slice(0, 10)}…`;
-    tokenCache.delete(token);
-    await updateWalletUi();
-    if (view === "profile") await loadPortfolio();
-    else setTimeout(() => refreshTokenPanel({ token }), 15000);
-  } catch (e) { msg.className = "msg err"; msg.textContent = (e.message ?? "failed").slice(0, 160); }
-}
-
-async function loadStats() {
-  try {
-    const [b, stats, closeData] = await Promise.all([
-      rpc("eth_getBalance", [CORE, "latest"]).catch(() => "0x0"),
-      fetch("/api/stats").then((x) => x.json()).catch(() => null),
-      fetch("/api/close").then((x) => x.json()).catch(() => null),
-    ]);
-    const nPlayers = Object.keys(registry.byId ?? {}).length;
-    const nDays = (history.days ?? []).length;
-    const coreChz = Number(b) / 1e18;
-    const cells = [
-      { k: "Players tracked", v: `${Object.keys(levels.players ?? {}).length}` },
-      { k: "Registered tokens", v: `${nPlayers}`, acc: true },
-      { k: "Days of record", v: `${nDays}` },
-      { k: "Match trail", v: `${Object.values(history.players ?? {}).reduce((s, p) => s + p.rows.length, 0)}` },
-    ];
-    if (stats && !stats.error) {
-      const ratio = stats.fundedRatio ?? 1;
-      const cls = ratio >= 0.999 ? "acc" : ratio >= 0.9 ? "" : "down";
-      cells.push({ k: "Core reserve", v: `${(Number(stats.poolBalance ?? stats.coreBalance) / 1e18).toFixed(2)} CHZ`, acc: false });
-      cells.push({ k: "Treasury", v: `${(Number(stats.treasuryBalance ?? 0) / 1e18).toFixed(2)} CHZ` });
-      cells.push({ k: "Reserve funded", v: `${(ratio * 100).toFixed(1)}%`, cls });
-      cells.push({ k: "Open claim", v: `${(Number(stats.outstandingNeed) / 1e18).toFixed(3)} CHZ`, cls: ratio < 0.999 ? "down" : "" });
-    } else {
-      cells.push({ k: "Core reserve", v: `${coreChz.toFixed(2)} CHZ` });
-    }
-    $("stats").innerHTML = cells.map((s) => `<div class="stat"><div class="k">${s.k}</div><div class="v ${s.cls ?? (s.acc ? "acc" : "")}">${s.v}</div></div>`).join("");
-    if (closeData?.latest) {
-      $("seasonBadge").textContent = `Official close ${closeData.latest.day} · ${closeData.latest.hash.slice(0, 8)}`;
-      $("seasonBadge").title = `Settlement levels for ${closeData.latest.day} — sha256 ${closeData.latest.hash}. Intraday values are indicative; the close is the authoritative print.`;
-    }
-    // season-end notice (levels reset to 7,500.00 on Jan 1; token prices carry over)
-    const now = new Date();
-    const seasonEnd = new Date(`${now.getUTCFullYear()}-12-31T23:59:59Z`);
-    const daysLeft = Math.ceil((seasonEnd - now) / 86400000);
-    if (daysLeft <= 21 && document.getElementById("seasonBanner") === null) {
-      const b = document.createElement("div");
-      b.id = "seasonBanner";
-      b.style.cssText = "background:var(--gold-soft);border:1px solid var(--gold);color:var(--gold);border-radius:12px;padding:12px 18px;font-size:13px;margin-bottom:14px;line-height:1.6";
-      b.innerHTML = `<b>Season ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.</b> On Jan 1 every level resets to 7,500.00 for the new season. Token prices carry over unchanged, so there is no need to sell before the reset.`;
-      $("stats").before(b);
-    }
-  } catch {}
-}
-
-function showMarket() {
-  view = "market";
-  $("marketTools").style.display = "";
-  $("grid").style.display = "";
-  $("profileView").style.display = "none";
-  location.hash = "";
-}
-
-let heroHtml = null;
-
-async function showProfile() {
-  view = "profile";
-  $("marketTools").style.display = "none";
-  $("grid").style.display = "none";
-  $("profileView").style.display = "";
-  location.hash = "profile";
-  if (!account) {
-    heroHtml = heroHtml ?? $("pfPanel").innerHTML;
-    $("pfPanel").innerHTML = heroHtml;
-    return;
-  }
-  await loadPortfolio();
-}
-
-async function loadPortfolio() {
-  $("pfPanel").innerHTML = `<div class="empty">Loading portfolio…</div>`;
-  try {
-    pfData = await fetch(`/api/portfolio?address=${account}`).then((r) => r.json());
-    if (pfData.error) throw new Error(pfData.error);
-  } catch (e) {
-    $("pfPanel").innerHTML = `<div class="empty">Portfolio load failed: ${esc(e.message)}</div>`;
-    return;
-  }
-  renderProfile();
-}
-
-function pnlSpan(weiStr) {
-  const v = Number(BigInt(weiStr)) / 1e18;
-  const cls = v > 0.0001 ? "up" : v < -0.0001 ? "down" : "flat";
-  return `<span class="delta ${cls}">${v > 0 ? "+" : ""}${v.toFixed(4)}</span>`;
-}
-
-function renderProfile() {
-  const d = pfData;
-  const holdings = d.holdings ?? [];
-  const pnl = d.totals?.pnl ?? "0";
-  const pnlBig = BigInt(pnl);
-  const pnlCls = pnlBig > 0n ? "up" : pnlBig < 0n ? "down" : "flat";
-  const rows = holdings.map((h) => `
-    <tr class="row" onclick="select('${h.espnId ?? ""}');showMarket()">
-      <td class="nm">${esc(h.symbol)} <span class="tok">${esc(h.name)}</span></td>
-      <td class="num">${eth(BigInt(h.balance), 6)}</td>
-      <td class="num">${eth(BigInt(h.nav), 4)}</td>
-      <td class="num">${eth(BigInt(h.value), 4)}</td>
-      <td class="num">${eth(BigInt(h.invested), 4)}</td>
-      <td class="num">${eth(BigInt(h.realized), 4)}</td>
-      <td class="num">${pnlSpan(h.pnl)}</td>
-      <td><button class="ghost" onclick="event.stopPropagation();quickTrade('${h.token}','${h.symbol}')">Trade</button></td>
-    </tr>`).join("");
-  const fills = (d.fills ?? []).map((f) => {
-    const ts = f.ts ? new Date(f.ts * 1000).toISOString().slice(0, 10) : "";
-    const px = Number(BigInt(f.nav)) / 1e18;
-    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 6)} tok @ ${px.toFixed(2)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
-  }).join("");
-  // orders placed during a live match: filled at the post-match price, then claimed
-  const queued = (d.pending ?? []).map((o) => {
-    const what = [BigInt(o.buyChz) > 0n ? `buy ${eth(BigInt(o.buyChz), 4)} CHZ` : "", BigInt(o.sellTokens) > 0n ? `sell ${eth(BigInt(o.sellTokens), 6)} tokens` : ""].filter(Boolean).join(" + ");
-    const state = o.refunded ? "refund ready" : o.settled ? `filled @ ${eth(BigInt(BigInt(o.buyChz) > 0n ? o.buyNav : o.nav), 2)}` : "fills after the result";
-    return `<div class="qorder"><span><b>${esc(o.symbol)}</b> <span class="tok">${esc(o.name)}</span> · <span class="mono">${what}</span> · ${state}</span>${o.settled
-      ? `<button class="ghost" onclick="claimOrder('${o.token}', ${o.epoch})">Claim</button>` : ""}</div>`;
-  }).join("");
-  $("pfPanel").innerHTML = `
-    <div class="pf-head">
-      <span class="dot" id="pfDot"></span>
-      <span class="name">${account.slice(0, 6)}…${account.slice(-4)}</span>
-      <span class="spacer"></span>
-      <button class="ghost" onclick="renderProfile()">Refresh</button>
-      <button class="ghost" onclick="disconnectWallet()">Disconnect</button>
-    </div>
-    <div class="pf-kv">
-      <div class="cell"><div class="k">CHZ balance</div><div class="v">${eth(BigInt(d.chz), 4)}</div></div>
-      <div class="cell"><div class="k">Open position value</div><div class="v">${eth(BigInt(d.totals.value), 4)}</div></div>
-      <div class="cell"><div class="k">Invested</div><div class="v">${eth(BigInt(d.totals.invested), 4)}</div></div>
-      <div class="cell"><div class="k">Realized proceeds</div><div class="v">${eth(BigInt(d.totals.realized), 4)}</div></div>
-      <div class="cell"><div class="k">Net PnL</div><div class="v ${pnlCls}">${pnlBig >= 0n ? "+" : ""}${(Number(pnlBig) / 1e18).toFixed(4)} CHZ</div></div>
-    </div>
-    <h2>Holdings (${holdings.length})</h2>
-    ${holdings.length ? `<table><thead><tr><th>Token</th><th class="num">Balance</th><th class="num">NAV</th><th class="num">Value</th><th class="num">Invested</th><th class="num">Realized</th><th class="num">PnL</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">No player tokens yet — buy one from the index table.</div>`}
-    ${queued ? `<h2>Queued orders (live matches)</h2><div class="qorders">${queued}</div>` : ""}
-    <h2>Trade history (on-chain fills)</h2>
-    <div class="fills">${fills || `<div class="empty">No fills yet.</div>`}</div>`;
-}
-
-let account = null, view = "market", pfData = null;
-let activeProvider = null, activeWalletName = "Wallet";
-const wallets = new Map(); // EIP-6963 discovered providers, by uuid
-const POPULAR = [
-  { name: "MetaMask", url: "https://metamask.io/download/" },
-  { name: "Rabby", url: "https://rabby.io/" },
-  { name: "Coinbase Wallet", url: "https://www.coinbase.com/wallet/downloads" },
-  { name: "Trust Wallet", url: "https://trustwallet.com/download" },
-  { name: "OKX Wallet", url: "https://www.okx.com/web3" },
-  { name: "Zerion", url: "https://zerion.io/download" },
-  { name: "Phantom", url: "https://phantom.app/download" },
-  { name: "Brave Wallet", url: "https://brave.com/wallet/" },
-];
-
-window.addEventListener("eip6963:announceProvider", (e) => {
-  const d = e.detail;
-  if (d?.info?.uuid && d?.provider && !wallets.has(d.info.uuid)) {
-    wallets.set(d.info.uuid, d);
-    if (!$("connectModal").hidden) renderConnectModal();
-  }
-});
-
-function toast(msg, cls = "") {
-  const t = document.createElement("div");
-  t.className = "toast " + cls;
-  t.textContent = msg;
-  $("toasts").appendChild(t);
-  setTimeout(() => t.remove(), 4600);
-}
-
-function applyTheme(t) {
-  if (t === "night") document.documentElement.dataset.theme = "night";
-  else delete document.documentElement.dataset.theme;
-  const m = document.querySelector('meta[name="theme-color"]');
-  if (m) m.content = t === "night" ? "#1a1410" : "#f4ecd8";
-}
-function toggleTheme() {
-  const next = document.documentElement.dataset.theme === "night" ? "day" : "night";
-  localStorage.setItem("fspi_theme", next);
-  applyTheme(next);
-}
-
-function walletErrMsg(e) {
-  if (e?.code === 4001) return "Connection request rejected in your wallet.";
-  if (e?.code === -32002) return "A request is already pending — open your wallet extension.";
-  return (e?.message ?? String(e)).slice(0, 180);
-}
-
-function openConnect() { $("connectModal").hidden = false; renderConnectModal(); }
-function closeConnect() { $("connectModal").hidden = true; }
-
-function detectedPopular(name) {
-  return [...wallets.values()].some((w) => (w.info.name || "").toLowerCase().includes(name.toLowerCase()));
-}
-
-function renderConnectModal() {
-  const list = [...wallets.values()];
-  $("walletList").innerHTML = list.length
-    ? list.map((w, i) => `
-      <button class="wrow" onclick="connectWith(${i})">
-        ${w.info.icon ? `<img src="${w.info.icon}" alt="">` : `<span class="ph">${esc(w.info.name?.[0] ?? "W")}</span>`}
-        <span><span>${esc(w.info.name ?? "Wallet")}</span><div class="sub">${esc(w.info.rdns ?? "")}</div></span>
-        <span class="arrow">›</span>
-      </button>`).join("")
-    : `<div class="wsec" style="padding-top:14px">No injected wallets detected yet</div>`;
-  // provider index for connectWith
-  wallets.forEach((w) => {});
-  $("installList").innerHTML = POPULAR
-    .filter((p) => !detectedPopular(p.name))
-    .map((p) => `<a class="wrow" href="${p.url}" target="_blank" rel="noopener">
-      <span class="ph">${esc(p.name[0])}</span>
-      <span><span>${esc(p.name)}</span><div class="sub">Install to connect</div></span>
-      <span class="arrow">↗</span></a>`).join("");
-}
-
-async function connectWith(idx) {
-  const w = [...wallets.values()][idx];
-  if (!w) return;
-  try {
-    closeConnect();
-    account = await ensureChain(w.provider);
-    activeProvider = w.provider;
-    activeWalletName = w.info.name ?? "Wallet";
-    localStorage.setItem("fspi_wallet_rdns", w.info.rdns ?? "");
-    await updateWalletUi();
-    toast(`Connected via ${activeWalletName}`, "ok");
-    if (view === "profile") await loadPortfolio();
-  } catch (e) {
-    toast(walletErrMsg(e), "err");
-  }
-}
-
-async function connectWallet() { openConnect(); }
-
-function disconnectWallet() {
-  account = null;
-  activeProvider = null;
-  localStorage.removeItem("fspi_wallet_rdns");
-  updateWalletUi();
-  showProfile();
-}
-
-async function updateWalletUi() {
-  if (!account) {
-    $("walletChip").style.display = "none";
-    $("connectBtn").style.display = "";
-    $("pfBtn").style.display = "none";
-    return;
-  }
-  $("walletChip").style.display = "flex";
-  $("connectBtn").style.display = "none";
-  $("pfBtn").style.display = "";
-  $("chipAddr").textContent = account.slice(0, 6) + "…" + account.slice(-4);
-  $("chipAddr").title = `${activeWalletName} · ${account}`;
-  let onChain = false;
-  try {
-    const cid = await pv().request({ method: "eth_chainId" });
-    onChain = cid.toLowerCase() === CHAIN_ID_HEX;
-  } catch {}
-  if (onChain) {
-    try {
-      const bal = await rpc("eth_getBalance", [account, "latest"]);
-      $("chipBal").textContent = eth(BigInt(bal), 3) + " CHZ";
-    } catch { $("chipBal").textContent = ""; }
-  } else {
-    $("chipBal").textContent = "wrong network";
-  }
-  $("chainDot").style.background = onChain ? "var(--up)" : "var(--down)";
-  $("walletChip").title = onChain
-    ? `${activeWalletName} · ${CHAIN_NAME} · ${account}`
-    : `${activeWalletName} · wrong network — reconnect to switch`;
-}
-
-function quickTrade(token, symbol) {
-  showMarket();
-  // open the player detail for this token
-  const entry = Object.entries(registry.byId ?? {}).find(([, v]) => v.token === token);
-  if (entry) { select(entry[0]); window.scrollTo({ top: 0, behavior: "smooth" }); }
-}
-
-async function connectSaved() {
-  // EIP-6963 announcements may race page load — give them a moment
-  await new Promise((r) => setTimeout(r, 250));
-  if (account) return;
-  const savedRdns = localStorage.getItem("fspi_wallet_rdns");
-  const w = savedRdns ? [...wallets.values()].find((x) => x.info.rdns === savedRdns) : null;
-  const prov = w?.provider ?? pv();
-  if (!prov) return;
-  try {
-    const accs = await prov.request({ method: "eth_accounts" });
-    if (accs && accs[0]) {
-      account = accs[0];
-      activeProvider = prov;
-      activeWalletName = w?.info?.name ?? "Wallet";
-      await updateWalletUi();
-    }
-  } catch {}
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  applyTheme(localStorage.getItem("fspi_theme") === "night" ? "night" : "day");
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-  connectSaved().then(() => { if (view === "profile") showProfile(); });
-});
-
-(async () => {
-  await loadAll();
-  await render();
-  await loadStats();
-  const prov = () => activeProvider ?? window.ethereum;
-  prov()?.on?.("accountsChanged", async (a) => {
-    account = a?.[0] ?? null;
-    if (!account) { activeProvider = null; }
-    await updateWalletUi();
-    if (view === "profile") await showProfile();
-  });
-  prov()?.on?.("chainChanged", async () => {
-    await updateWalletUi();
-    if (view === "profile") await loadPortfolio();
-  });
-  if (location.hash === "#profile") showProfile();
-})();
+  const get = (u) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(new Error(u))));
+  Promise.all([get("/api/registry"), get("/api/levels"), get("/api/history")]).then(([reg, lv, hist]) => {
+    const byId = reg.byId ?? {};
+    const rows = Object.entries(byId)
+      .filter(([id]) => lv.players?.[id])
+      .map(([id, r]) => ({ id, name: lv.players[id].name, sym: r.symbol, price: priceOf(lv.players[id].levelFloat) }))
+      .sort((a, b) => b.price - a.price);
+    if (!rows.length) return;
+    const lead = rows[0];
+    const days = hist.days ?? [];
+    const series = days.map((dd) => dd.lv?.[lead.id]).filter((v) => v !== undefined).map((v) => priceOf(v / 100));
+    const step = Math.max(1, Math.ceil(series.length / 60));
+    const s = series.filter((_, i) => i % step === 0 || i === series.length - 1);
+    if (s.length < 2) return;
+    render({ lead: { name: lead.name, sym: lead.sym, series: s }, from: days[0].d, to: days[days.length - 1].d, top: rows.slice(1, 4) });
+    document.getElementById("f-players").textContent = rows.length.toLocaleString("en-US");
+  }).catch(() => {});
+  get("/api/close").then((c) => { if (c.latest?.matches) document.getElementById("f-matches").textContent = c.latest.matches.toLocaleString("en-US"); }).catch(() => {});
+  get("/api/stats").then((st) => {
+    if (st.feeBps != null) document.getElementById("f-fee").textContent = `${st.feeBps / 100}%`;
+  }).catch(() => {});
 </script>
 </body>
 </html>

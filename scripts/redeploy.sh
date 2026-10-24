@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Redeploy the Tennis Index contracts on Chiliz Spicy (88882) and re-register
+# Redeploy the Courtline contracts on Chiliz Spicy (88882) and re-register
 # the player universe on the new core.
 #
 #   scripts/redeploy.sh                 # preflight only: checks, costs, plan (no transactions)
@@ -141,7 +141,7 @@ if step ui; then
   node -e '
     const fs = require("fs");
     const [root, oc, oi, nc, ni] = process.argv.slice(1);
-    for (const f of ["app/index.html", "app/docs.html", "README.md"]) {
+    for (const f of ["app/index.html", "app/market.html", "app/docs.html", "README.md"]) {
       const p = `${root}/${f}`;
       let s = fs.readFileSync(p, "utf8");
       const before = s;

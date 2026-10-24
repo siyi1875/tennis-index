@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tennis Index oracle CLI
+// Courtline oracle CLI
 // Usage: node src/run.js <command>
 //   backfill            fetch full 2026 season scoreboards (cached on disk)
 //   compute             rebuild state from cached matches + rankings (+ history)
@@ -156,16 +156,17 @@ function symbolFor(name, tour, used) {
   const parts = name.split(/\s+/).filter(Boolean);
   const last = parts.length > 1 ? parts[parts.length - 1] : name;
   let base = (last.replace(/[^A-Za-z]/g, "").slice(0, 3) || "PLY").toUpperCase();
-  const prefix = tour === "atp" ? "ATP" : "WTA";
+  // M-/W- (men's/women's tour): neutral codes, not the tours' marks
+  const prefix = tour === "atp" ? "M" : "W";
   let sym = `${prefix}-${base}`;
   if (!used.has(sym)) {
     used.add(sym);
     return sym;
   }
-  // disambiguate within 8 chars: "ATP-SIN2" ... "ATP-SI99"
+  // disambiguate within 8 chars: "M-SIN2" ... "M-SIN99"
   for (let n = 2; n <= 99; n++) {
     const suffix = String(n);
-    const keep = 5 - prefix.length - 1 - suffix.length; // chars of base available
+    const keep = 8 - prefix.length - 1 - suffix.length; // chars of base available
     sym = `${prefix}-${base.slice(0, Math.max(1, keep))}${suffix}`;
     if (!used.has(sym)) {
       used.add(sym);

@@ -1,4 +1,4 @@
-// Minimal static + data server for the FSPI Tennis Index demo UI.
+// Minimal static + data server for the Courtline demo UI.
 // Read-only on-chain reads for the portfolio view live here (browser does trades).
 import http from "node:http";
 import fs from "node:fs";
@@ -281,7 +281,7 @@ http.createServer(async (req, res) => {
     }
     return;
   }
-  let fp = p === "/" ? "/index.html" : p === "/docs" ? "/docs.html" : p;
+  let fp = p === "/" ? "/index.html" : p === "/docs" ? "/docs.html" : p === "/market" ? "/market.html" : p;
   const file = path.join(root, path.normalize(fp));
   if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
@@ -291,4 +291,4 @@ http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": mime });
     res.end(data);
   });
-}).listen(port, () => console.log(`FSPI Tennis UI: http://localhost:${port}`));
+}).listen(port, () => console.log(`Courtline UI: http://localhost:${port}`));

@@ -16,14 +16,14 @@ import {
 } from "./PlayerToken.sol";
 
 /// @title TennisIndex
-/// @notice Registry of ATP/WTA player performance indexes (FSPI-style) with an
+/// @notice Registry of tennis player form levels with an
 ///         oracle-gated level feed. Each player gets its own tradable
-///         PlayerToken whose NAV tracks the player's index level. Human names
+///         PlayerToken whose NAV tracks the player's form level. Human names
 ///         are kept off-chain by the oracle's registry; the chain stores the
 ///         tradable essentials only.
 ///
-/// Levels are stored with 2 decimals: 750_000 == 7,500.00 (FSPI base level).
-/// The oracle (off-chain, ATP/WTA official results via ESPN) computes levels
+/// Levels are stored with 2 decimals: 750_000 == 7,500.00 (base level).
+/// The oracle (off-chain, from public match results) computes levels
 /// with a published expectation-relative scoring table and pushes official closes.
 ///
 /// The core is the performance counterparty: when a level rises it funds the

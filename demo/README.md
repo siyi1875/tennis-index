@@ -1,4 +1,7 @@
-# Demo walkthrough — FSPI Tennis Index trade flow
+# Demo walkthrough — Courtline trade flow
+
+Recorded on an earlier deployment, before token symbols moved from `ATP-`/`WTA-` to
+neutral `M-`/`W-` prefixes.
 
 The nine step frames below are current as of 2026-10-21; every transaction shown
 is a genuine signed Spicy testnet transaction from the admin wallet. The only

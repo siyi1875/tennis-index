@@ -1,13 +1,17 @@
-# FSPI Tennis Index — Chiliz Spicy Testnet MVP
+# Courtline — Chiliz Spicy Testnet MVP
 
-A tradable performance index for ATP/WTA tennis players, modeled on the FSPI league-index
-methodology (futuresports.com). Every player in the ATP top-100 and WTA top-100 has a
-per-player ERC-20 token whose price tracks the player's season performance level. Levels
-are computed off-chain from official results (ESPN data) and pushed on-chain by an
-oracle; the core contract acts as the performance counterparty so that holder wealth
-tracks the index.
+Tradable form tokens for top men's and women's tennis players. Every player in the
+men's and women's top-100 has a per-player ERC-20 token whose price tracks the player's
+season form level. Levels are computed off-chain from public match results and pushed
+on-chain by an oracle; the core contract acts as the counterparty so that holder wealth
+tracks the level.
 
 This is a **testnet demo** (Chiliz Spicy, chain 88882). Tokens are not real assets.
+
+Courtline is independent: it is not affiliated with, endorsed by or licensed by the ATP,
+the WTA, any player or any data provider. Player names only identify whose public match
+results a token follows. Token symbols use neutral `M-`/`W-` prefixes (men's/women's
+tour). "Courtline" is a working name and has not been cleared as a trademark.
 
 ## Architecture
 
@@ -133,19 +137,19 @@ rounds; a 4th-deep round maps to R128 vs R96 by match count (≥40 → 128-draw)
 |---|---|
 | TennisIndex core | `0xbb9f9259e584a6d84f60376bae4bf30e3e5aeb4d` |
 | PlayerToken implementation | `0xe36aaf8e32c4426eb1ec7e1fd5debe4379c2ba7b` |
-| Admin / Oracle / Treasury keyholder | `0x6720Cab7fBC755d51F92187146aF0dD9ca3E8d17` |
+| Admin / Oracle / Treasury keyholder | `0xf47629f1ad3377603C45eF721248e2867E6bb672` |
 
-202 players registered (top-100 ATP + top-100 WTA by current ESPN ranking, plus the two
-strongest non-ranked by season level). **Tracking window: Jul 1 → today** (`SEASON_START`
+197 players registered (men's and women's top-100 by current ranking, plus the
+strongest non-ranked players by season level). **Tracking window: Jul 1 → today** (`SEASON_START`
 env, default `20260701`; set `SEASON_START=20260101` for the full season). Levels were
 rebuilt from the mid-year baseline of 7,500.00 and calibrated on-chain in one admin pass.
-Current leaders by index (surprise, not world ranking): Davidovich Fokina 7,937.75 (ATP), Zheng Qinwen 8,106.87 (WTA).
+The landing page and market show the current leaders (by level, not world ranking).
 
 Every player's level is **retraceable**: `oracle/state/history-2026.json` holds a daily
 level snapshot for the whole window plus, per player, a chronological trail where each
 match row (event, tier, round, opponent, result, score, expectation, surprise, cp, running level) and each
 milestone row is recorded; `pushlog-2026.json` records every on-chain push. A replay
-assertion guarantees the trail sums exactly to the computed level (0/677 mismatches).
+assertion guarantees the trail sums exactly to the computed level (0 mismatches).
 
 Gas on Spicy: base fee is fixed at 2500 gwei; a small priority tip (~100–200 gwei) is
 enough. Registration cost ≈ 141k gas ≈ 0.35 CHZ per player (batched `addPlayers`, 20/tx);
@@ -251,8 +255,8 @@ Oracle: `cd oracle && node --test test/*.mjs` — 30 tests.
 
 ## Business model
 
-The design follows the futuresports/FSPI model of an **index administrator** — the venue
-does not take a position; it defines methodology, publishes the record, and earns fees.
+The venue defines the methodology, publishes the record, acts as counterparty through
+the funded pool, and earns fees.
 
 **Revenue: trading fees.** Every buy and sell pays a fee (default 1%/1%, set on-chain
 when the token is created). The core splits each fee on arrival (`collectFee`):
@@ -279,21 +283,22 @@ Reserve economics (live season, Jul 1 → Oct 18 measured): match points are zer
 A broad book therefore costs ~0.1%/yr to keep funded. A star-concentrated book is the
 stress case: the top-ranked basket costs ~5.7%/yr and the top-10 by index ~18%/yr.
 At 1%/side, break-even turnover is ~0.48× book/month for the star basket (0.01× for a
-broad book); 2×/month produces fee revenue of 24% of book/year. The core is a
-clearinghouse for transfers plus a small milestone mint, not a subsidy for match
-outcomes.
+broad book); 2×/month produces fee revenue of 24% of book/year. The core mainly
+clears zero-sum transfers and funds a small milestone mint.
 
-**Benchmark-ification (the FSPI/CME path).** Intraday pushes are indicative; once a
-day at 09:00 UTC the oracle publishes the **Official Daily Close** — settlement levels
-computed from all eligible completed matches through the prior day, hash-pinned
-(sha256 of the level table) in `oracle/state/close-2026.json` and served at `/api/close`.
-This is the artifact a derivatives venue would license: settlement-by-construction,
-no reserve requirement, no annual-reset cost. The per-player tokens provide the real
-spot leg that makes basis arbitrage against such futures possible.
+**Official Daily Close.** Intraday pushes are indicative; once a day at 09:00 UTC the
+oracle publishes the **Official Daily Close**: settlement levels computed from all
+eligible completed matches through the prior day, hash-pinned (sha256 of the level
+table) in `oracle/state/close-2026.json` and served at `/api/close`.
 
 **Season reset.** Levels reset to 7,500.00 on Jan 1 while token prices carry over
 (per-token scale); no CHZ moves, so the reset is neither a cost to the pool nor an
 arbitrage. The UI's year-end banner says so.
+
+**Before any mainnet use:** get legal advice on securities, derivatives and gambling
+rules in each target market, player name rights, and data licensing (the oracle reads
+undocumented public ESPN endpoints, fine for a demo but not for a commercial product).
+Add terms of use and a privacy notice, and choose a licence for this repository.
 
 **Known gap:** a single-signer oracle is a trust assumption; a production version
 needs multi-sig or zk-attested score feeds, and the treasury address and admin role
