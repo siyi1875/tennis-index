@@ -97,9 +97,11 @@ if step deploy; then
     const addr = (name) => b.transactions.find((t) => t.contractName === name && t.transactionType === "CREATE")?.contractAddress;
     const core = addr("TennisIndex"), impl = addr("PlayerToken");
     if (!core || !impl) throw new Error("addresses not found in " + run);
+    const rc = b.receipts.find((r) => r.contractAddress?.toLowerCase() === core.toLowerCase());
+    const deployBlock = rc ? Number(rc.blockNumber) : undefined;
     const d = JSON.parse(fs.readFileSync(file, "utf8"));
     const previous = [...(d.previous ?? []), { core: d.core, playerTokenImplementation: d.playerTokenImplementation, deployedAt: d.deployedAt }];
-    const next = { ...d, core, playerTokenImplementation: impl, deployer, deployedAt: new Date().toISOString().slice(0, 10), previous };
+    const next = { ...d, core, playerTokenImplementation: impl, deployer, deployedAt: new Date().toISOString().slice(0, 10), deployBlock, previous };
     fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
     console.log("new core", core, "impl", impl);
   ' "$ROOT/contracts/broadcast/Deploy.s.sol/$CHAIN_ID/run-latest.json" "$DEPLOYMENTS" "$DEPLOYER_ADDRESS"
@@ -140,15 +142,17 @@ if step ui; then
   NEW_IMPL="$(json d.playerTokenImplementation)"
   node -e '
     const fs = require("fs");
-    const [root, oc, oi, nc, ni] = process.argv.slice(1);
+    const [root, oc, oi, nc, ni, blk] = process.argv.slice(1);
     for (const f of ["app/index.html", "app/market.html", "app/docs.html", "README.md"]) {
       const p = `${root}/${f}`;
       let s = fs.readFileSync(p, "utf8");
       const before = s;
       for (const [o, n] of [[oc, nc], [oi, ni]]) s = s.replace(new RegExp(o, "gi"), n.toLowerCase());
+      // trade history in the market page is read from the deploy block on
+      if (blk) s = s.replace(/const DEPLOY_BLOCK = \d+;/, `const DEPLOY_BLOCK = ${blk};`);
       if (s !== before) { fs.writeFileSync(p, s); console.log("updated", f); }
     }
-  ' "$ROOT" "$OLD_CORE" "$OLD_IMPL" "$CORE" "$NEW_IMPL"
+  ' "$ROOT" "$OLD_CORE" "$OLD_IMPL" "$CORE" "$NEW_IMPL" "$(json 'd.deployBlock ?? ""')"
 fi
 
 # --------------------------------- pages ---------------------------------
