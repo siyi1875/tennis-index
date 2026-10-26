@@ -235,6 +235,23 @@
   }
   .btnrow input::placeholder { color: var(--ink-3); font-weight: 400; }
   .btnrow input:focus { border-color: var(--line-strong); }
+  .sizer { margin-top: 10px; }
+  .sizer input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; --pct: 0%;
+  }
+  .sizer input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-full); background: linear-gradient(to right, var(--ink-2) var(--pct), var(--sunk) var(--pct)); }
+  .sizer input[type=range]::-moz-range-track { height: 4px; border-radius: var(--r-full); background: var(--sunk); }
+  .sizer input[type=range]::-moz-range-progress { height: 4px; border-radius: var(--r-full); background: var(--ink-2); }
+  .sizer input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--raised); border: 2px solid var(--ink-2); }
+  .sizer input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--raised); border: 2px solid var(--ink-2); }
+  .sizer input[type=range]:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; border-radius: var(--r-xs); }
+  .pcts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+  .pcts button {
+    font: 600 11.5px/1 var(--mono); color: var(--ink-2); background: var(--sunk); border: 1px solid transparent;
+    border-radius: var(--r-xs); padding: 7px 0; cursor: pointer;
+  }
+  .pcts button:hover { border-color: var(--line-strong); }
+  .pcts button.on { background: var(--raised); border-color: var(--line-strong); color: var(--ink); }
   .btn {
     background: var(--up); color: #f4ecd8; border: 0; border-radius: var(--r-sm);
     padding: 10px 18px; font-weight: 600; cursor: pointer; font-size: 13px;
@@ -718,8 +735,12 @@ function tokenPanelHtml(reg) {
         <button id="sideSell" class="sell" onclick="setSide('sell')">Sell</button>
       </div>
       <div class="btnrow" id="orderRow">
-        <input id="orderAmt" placeholder="CHZ to spend" inputmode="decimal" aria-label="Order amount">
+        <input id="orderAmt" placeholder="CHZ to spend" inputmode="decimal" aria-label="Order amount" oninput="typedAmount()">
         <button class="btn" id="orderBtn" onclick="submitOrder('${reg.token}')">Buy</button>
+      </div>
+      <div class="sizer">
+        <input type="range" id="orderPct" min="0" max="100" step="1" value="0" aria-label="Share of balance" oninput="pickPct('${reg.token}', +this.value)">
+        <div class="pcts">${[25, 50, 75, 100].map((n) => `<button type="button" data-pct="${n}" onclick="pickPct('${reg.token}', ${n})">${n === 100 ? "Max" : n + "%"}</button>`).join("")}</div>
       </div>
       <div class="msg" id="tokMsg"></div>
       <div class="qorders" id="myOrders"></div>
@@ -740,8 +761,49 @@ function setSide(s, keepAmount = false) {
   if (s === "buy") { inp.placeholder = "CHZ to spend"; inp.setAttribute("aria-label", "CHZ to spend"); btn.className = "btn"; }
   else { inp.placeholder = "Tokens to sell"; inp.setAttribute("aria-label", "Tokens to sell"); btn.className = "btn sec"; }
   btn.textContent = tokenQueued ? `Queue ${verb.toLowerCase()}` : verb;
-  if (!keepAmount) inp.value = "";
+  if (!keepAmount) { inp.value = ""; picked = null; showPct(0); }
 }
+
+// Quick sizing: a share of the wallet's CHZ (buy) or of the holding (sell).
+// Max buy keeps GAS_RESERVE back for the network fee; Max sell is the exact
+// balance, kept in wei so a rounded display value leaves no dust.
+const GAS_RESERVE = 10n ** 18n; // 1 CHZ
+let walletWei = null, holdWei = null; // set by refreshTokenPanel
+let picked = null; // { wei, text } last amount set by the sizer
+const sizeBase = () => {
+  if (orderSide === "sell") return holdWei ?? 0n;
+  const w = (walletWei ?? 0n) - GAS_RESERVE;
+  return w > 0n ? w : 0n;
+};
+function fmtFloor(wei, d) {
+  const q = (wei / 10n ** BigInt(18 - d)).toString().padStart(d + 1, "0");
+  return (q.slice(0, -d) + "." + q.slice(-d)).replace(/\.?0+$/, "");
+}
+function showPct(pct) {
+  const r = $("orderPct");
+  if (r) { r.value = pct; r.style.setProperty("--pct", pct + "%"); }
+  document.querySelectorAll(".pcts button").forEach((b) => b.classList.toggle("on", +b.dataset.pct === pct));
+}
+async function pickPct(token, pct) {
+  if (walletWei === null) {
+    try { await ensureChain(); await refreshTokenPanel({ token }); }
+    catch (e) { const m = $("tokMsg"); m.className = "msg err"; m.textContent = "Connect a wallet to size from your balance."; showPct(0); return; }
+  }
+  const base = sizeBase();
+  const wei = pct >= 100 ? base : (base * BigInt(pct)) / 100n;
+  const text = wei > 0n ? fmtFloor(wei, orderSide === "buy" ? 2 : 6) : "";
+  $("orderAmt").value = text;
+  picked = wei > 0n ? { wei, text } : null;
+  showPct(pct);
+}
+function typedAmount() {
+  picked = null;
+  const base = sizeBase(), v = toWei($("orderAmt").value.trim()) ?? 0n;
+  const pct = base > 0n ? Number((v * 100n) / base) : 0;
+  showPct(Math.min(100, pct));
+}
+// the amount to send: the sizer's exact wei if the box still shows its value
+const orderWei = (amt) => (picked && picked.text === amt ? picked.wei : toWei(amt));
 
 /// Live-match state from the core: 0 open, 1 live (queue), 2 paused, 3 oracle offline.
 async function renderLiveBar(token) {
@@ -890,6 +952,7 @@ async function refreshTokenPanel(reg) {
             rpc("eth_getBalance", [acc, "latest"]),
             ethCall(reg.token, SEL.balanceOf + acc.slice(2).toLowerCase().padStart(64, "0")),
           ]);
+          walletWei = BigInt(bal); holdWei = BigInt(hold);
           $("walletBal").textContent = eth(BigInt(bal), 3) + " CHZ";
           $("holdBal").textContent = eth(BigInt(hold), 6) + " " + reg.symbol;
           await renderMyOrders(reg.token, acc);
@@ -912,7 +975,7 @@ async function doBuy(token) {
   const msg = $("tokMsg");
   try {
     const amt = $("orderAmt").value.trim();
-    const value = toWei(amt);
+    const value = orderWei(amt);
     if (!value) throw new Error("Enter a CHZ amount.");
     const nav = BigInt(await ethCall(token, SEL.navWad));
     const minOut = (value * 98n) / nav; // 2% slippage guard (token wei; value and nav both 1e18-scaled)
@@ -937,7 +1000,7 @@ async function doSell(token) {
   const msg = $("tokMsg");
   try {
     const amt = $("orderAmt").value.trim();
-    const amtW = toWei(amt);
+    const amtW = orderWei(amt);
     if (!amtW) throw new Error("Enter a token amount.");
     const acc = await ensureChain();
     const nav = BigInt(await ethCall(token, SEL.navWad));
