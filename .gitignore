@@ -24,3 +24,5 @@ contracts/broadcast/**/*.lock
 .claude/
 .opencode/
 agent/
+.gstack/
+oracle/state/pages-published.json

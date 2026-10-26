@@ -11,6 +11,7 @@
 //   watch               loop: fetch results + order of play, compute, push, post halts (default 5 min)
 //   halts               one pass of live-match halts (schedule / resume / heartbeat)
 //   seasonreset         Jan 1: levels back to 7,500.00, token prices carry over (oracle)
+//   publish             push the site data to the pages-data branch and redeploy Pages (watch: daily)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,7 @@ import { saveJson, loadJson, serializeState } from "./state.js";
 import { seededLookup } from "./seeds.js";
 import { haltPlan, unscoredPlayers, haltActions } from "./live.js";
 import { getWallet, getCore, TX_OVERRIDES, RPC_URL, DEPLOYMENTS_FILE, saveDeployments } from "./chain.js";
+import { publishPagesData } from "./publish.js";
 import { ethers } from "ethers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +38,7 @@ const SEEDS_FILE = `seeds-${SEASON}.json`;
 
 async function main() {
   const cmd = process.argv[2] || "help";
-  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, halts, seasonreset, watch, deployinfo, help };
+  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, halts, seasonreset, watch, deployinfo, publish, help };
   if (commands[cmd]) await commands[cmd](process.argv[3]);
   else commands.help();
 }
@@ -493,6 +495,24 @@ async function maybePublishClose() {
   await close(target);
 }
 
+async function publish() {
+  const { repo, triggered } = publishPagesData(SEASON);
+  console.log(`site data published to ${repo}@pages-data${triggered ? "; Pages redeploy started" : " (Pages picks it up on its daily run)"}`);
+}
+
+/// Once a day, after the official close: refresh the published site data.
+/// PAGES_PUBLISH=0 turns it off (e.g. a second oracle, or no push access).
+const PUBLISHED_FILE = "pages-published.json";
+async function maybePublishPages() {
+  if (process.env.PAGES_PUBLISH === "0") return;
+  const now = new Date();
+  if (now.getUTCHours() < CLOSE_HOUR_UTC) return;
+  const today = now.toISOString().slice(0, 10);
+  if (loadJson(PUBLISHED_FILE, {}).day === today) return;
+  await publish();
+  saveJson(PUBLISHED_FILE, { day: today, at: now.toISOString() });
+}
+
 async function watch() {
   // Halts are posted ahead and hold until the post-match push, so the
   // interval only sets how soon queued orders fill after a match.
@@ -505,6 +525,7 @@ async function watch() {
       await push(state);
       await halts(state, schedule);
       await maybePublishClose();
+      await maybePublishPages();
       await maybeClaimFaucet();
     } catch (e) {
       console.error(`watch iteration failed: ${e.message?.slice(0, 300)}`);
@@ -612,7 +633,7 @@ async function deployinfo() {
 }
 
 async function help() {
-  console.log(`commands: backfill compute report register push rebase close fees treasury halts seasonreset watch deployinfo`);
+  console.log(`commands: backfill compute report register push rebase close fees treasury halts seasonreset watch deployinfo publish`);
 }
 
 main().catch((e) => {

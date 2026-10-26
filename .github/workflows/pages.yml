@@ -6,7 +6,9 @@ on:
     paths:
       - "docs/**"
       - ".github/workflows/pages.yml"
-  workflow_dispatch:
+  workflow_dispatch: # the oracle starts this after publishing site data
+  schedule:
+    - cron: "30 10 * * *" # daily, after the 09:00 UTC close, in case the oracle's trigger failed
 
 permissions:
   contents: read
@@ -25,6 +27,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # the oracle publishes current levels, history and closes to the
+      # pages-data branch (oracle/src/publish.js); use them when present
+      - name: Use the latest site data
+        run: |
+          if git fetch --depth=1 origin pages-data; then
+            git archive FETCH_HEAD data | tar -x -C docs
+            echo "site data from pages-data: $(git log -1 --format=%s FETCH_HEAD)"
+          else
+            echo "no pages-data branch yet: using docs/data from main"
+          fi
       - uses: actions/configure-pages@v5
         with:
           enablement: true
