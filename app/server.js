@@ -62,7 +62,18 @@ async function logFromBlock() {
     latestBlock = await provider.getBlockNumber().catch(() => 0);
     latestBlockAt = Date.now();
   }
-  return Math.max(0, latestBlock - LOG_WINDOW);
+  // trade history starts at the core's deploy block (older cores: last window)
+  let deployBlock = 0;
+  try { deployBlock = JSON.parse(fs.readFileSync(path.join(stateDir, "deployments.json"), "utf8")).deployBlock ?? 0; } catch {}
+  return deployBlock || Math.max(0, latestBlock - LOG_WINDOW);
+}
+/// getLogs from `fromBlock` to the head, in windows the RPC accepts.
+async function getLogsAll(filter, fromBlock) {
+  const out = [];
+  for (let f = fromBlock; f <= latestBlock; f += LOG_WINDOW) {
+    out.push(...(await provider.getLogs({ ...filter, fromBlock: f, toBlock: Math.min(latestBlock, f + LOG_WINDOW - 1) })));
+  }
+  return out;
 }
 async function blockTs(n) {
   if (blockTsCache.has(n)) return blockTsCache.get(n);
@@ -100,7 +111,7 @@ async function buildPortfolio(addr) {
     for (const [topic, kind] of [[BOUGHT_TOPIC, "buy"], [SOLD_TOPIC, "sell"]]) {
       let logs = [];
       try {
-        logs = await provider.getLogs({ address: h.token, fromBlock, topics: [topic, padTopic] });
+        logs = await getLogsAll({ address: h.token, topics: [topic, padTopic] }, fromBlock);
       } catch { logs = []; }
       for (const log of logs) {
         const d = log.data.slice(2);
@@ -156,7 +167,7 @@ async function buildPortfolio(addr) {
 /// (token, epoch). settled = filled at the post-match price, ready to claim.
 async function pendingOrders(addr, tokens, padTopic, fromBlock) {
   const byToken = new Map(tokens.map((t) => [t.token.toLowerCase(), t]));
-  const logs = await provider.getLogs({ fromBlock, topics: [QUEUED_TOPICS, null, padTopic] });
+  const logs = await getLogsAll({ topics: [QUEUED_TOPICS, null, padTopic] }, fromBlock);
   const keys = new Map();
   for (const l of logs) {
     const t = byToken.get(l.address.toLowerCase());

@@ -133,6 +133,20 @@
   .grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
   .grid.with-detail { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
   @media (max-width: 1020px) { .grid.with-detail { grid-template-columns: 1fr; } }
+  /* side by side with a player open: drop the trend column so NAV stays in view */
+  @media (min-width: 1021px) { .grid.with-detail table th:nth-child(6), .grid.with-detail table td:nth-child(6) { display: none; } }
+  /* phones: wrap the header, let wide tables scroll inside their panel */
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px 40px; }
+    header { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 8px; margin: 0 -16px 20px; padding: 10px 16px; }
+    .badge, .brand h1 em { display: none; }
+    .navlink { padding: 8px 6px; }
+    .toolbar { flex-wrap: wrap; }
+    input.search { width: auto; flex: 1; min-width: 0; }
+    .hint { width: 100%; margin-left: 0; }
+    .grid > * { min-width: 0; }
+    .tablewrap, #pfPanel { overflow-x: auto; }
+  }
 
   .panel { background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
   .panel h2 {
@@ -401,7 +415,7 @@
           <tbody id="tbody"></tbody>
         </table>
       </div>
-      <div class="empty" id="emptyMsg" hidden><span class="skl" style="width:70%"></span><br><br>Loading index…</div>
+      <div class="empty" id="emptyMsg" hidden><span class="skl" style="width:70%"></span><br><br>Loading players…</div>
     </div>
   </div>
 
@@ -445,8 +459,12 @@ const SEL = {
   // live-match queue
   tradeStatus: "0xc229550c", haltFrom: "0xfb3e7511", epoch: "0x900cf0cf",
   orders: "0xbc908963", claim: "0x1790c562", batches: "0x3fef78cb",
+  buyFeeBps: "0x77d2300e", sellFeeBps: "0x23cbe1f3",
+  // core
+  tokenLevel: "0x9c53f267", treasuryBalance: "0x313dab20", targetNavOf: "0xd8b9fdbc",
 };
 const CORE = "0x6cec3949ca5ae6a8395b0aa4a354047843929c75"; // TennisIndex core (oracle/state/deployments.json)
+const DEPLOY_BLOCK = 39723453; // the core's deploy block: trade history is read from here (set by scripts/redeploy.sh)
 const RPC = "https://spicy-rpc.chiliz.com";
 const CHAIN_ID_HEX = "0x15b32"; // 88882 = Chiliz Spicy testnet
 const CHAIN_NAME = "Chiliz Spicy Testnet";
@@ -490,7 +508,22 @@ async function loadAll() {
     fetch("/api/history").then((x) => x.json()),
   ]);
   registry = r; levels = l; history = h;
+  await liveLevels();
   $("seasonBadge").textContent = `Season ${new Date(l.seasonStart ?? Date.now()).getFullYear()} · tracking since ${(l.seasonStart ?? "—")}`;
+}
+
+// Levels of registered players straight from the core. The registry and
+// history files are a snapshot (Pages build); without this the table would
+// show levels from the build day.
+async function liveLevels() {
+  const ids = Object.keys(registry.byId ?? {}).filter((id) => registry.byId[id].token && levels.players?.[id]);
+  try {
+    const res = await rpcBatch(ids.map((id) => ["eth_call", [{ to: CORE, data: SEL.tokenLevel + registry.byId[id].token.slice(2).toLowerCase().padStart(64, "0") }, "latest"]]));
+    ids.forEach((id, k) => {
+      const lv = res[k] && res[k] !== "0x" ? Number(BigInt(res[k])) : 0;
+      if (lv > 0) { levels.players[id].level2dp = lv; levels.players[id].levelFloat = lv / 100; }
+    });
+  } catch {} // keep the snapshot levels
 }
 
 function rowsFor(t) {
@@ -509,13 +542,22 @@ function dayLevels(id) {
   return arr;
 }
 
+// Change over the last 1 / 7 calendar days: the current (live) level against
+// the level at the end of that day. The history only has days with matches,
+// so "k entries back" would mean "k match days back".
 function deltas(id) {
   const series = dayLevels(id);
   const n = series.length;
   if (n === 0) return { d1: null, d7: null, series };
-  const last = series[n - 1][1];
-  const at = (back) => (n - 1 - back >= 0 ? series[n - 1 - back][1] : null);
-  return { d1: at(1) === null ? null : last - at(1), d7: at(7) === null ? null : last - at(7), series };
+  const last = levels.players?.[id]?.level2dp ?? series[n - 1][1];
+  const at = (k) => {
+    const day = new Date(Date.now() - k * 86400000).toISOString().slice(0, 10);
+    let v = null;
+    for (const [d, lv] of series) { if (d > day) break; v = lv; }
+    return v;
+  };
+  const a1 = at(1), a7 = at(7);
+  return { d1: a1 === null ? null : last - a1, d7: a7 === null ? null : last - a7, series };
 }
 
 function spark(series, w = 92, h = 26) {
@@ -648,6 +690,7 @@ function milestoneOf(row) {
 }
 
 async function showDetail(id) {
+  holdWei = null; picked = null; // sizing state belongs to the previous token
   const v = levels.players?.[id];
   const reg = registry.byId?.[id];
   const h = history.players?.[id] ?? { rows: [] };
@@ -693,7 +736,7 @@ async function showDetail(id) {
     <h2>Retraceable trail — every point, the match and the expectation</h2>
     <div class="feednote">Points scale with surprise — the lower the pre-match expectation, the bigger the move.</div>
     <div class="feed">${feed || `<div class="empty">No tracked matches since season start.</div>`}</div>
-    ${reg?.token ? tokenPanelHtml(reg) : `<div class="tokenbox"><div class="empty">No token deployed yet — this player is tracked on the index and becomes tradeable in a future registration batch.</div></div>`}
+    ${reg?.token ? tokenPanelHtml(reg) : `<div class="tokenbox"><div class="empty">No token deployed yet — this player is tracked here and becomes tradeable in a future registration batch.</div></div>`}
   `;
   if (reg?.token) await refreshTokenPanel(reg);
 }
@@ -725,7 +768,7 @@ function tokenPanelHtml(reg) {
       <div class="qorders" id="myOrders"></div>
       <div class="oref"><span>wallet</span><b id="walletBal">—</b></div>
       <div class="oref"><span>holdings</span><b id="holdBal">—</b></div>
-      <div class="feenote"><span>Fee 1% per side → core reserve</span><span>Slippage guard 2%</span></div>
+      <div class="feenote"><span>Fee 1% per side</span><span>Slippage guard 2%</span></div>
     </div>`;
 }
 
@@ -857,23 +900,9 @@ async function claimOrder(token, epoch) {
       else if ($("myOrders")) refreshTokenPanel({ token });
     }, 12000);
   } catch (e) {
-    const t = (e.message ?? "failed").slice(0, 160);
+    const t = txErrMsg(e);
     if (msg) { msg.className = "msg err"; msg.textContent = t; } else toast(t, "err");
   }
-}
-
-function setAmt(v) {
-  const inp = $("orderAmt");
-  if (!inp) return;
-  if (orderSide === "sell") {
-    const h = parseFloat(($("holdBal")?.textContent ?? "").replace(/[^\d.]/g, ""));
-    if (!h) { toast("Connect your wallet to load holdings first.", "err"); return; }
-    if (v === "max") inp.value = String(h);
-    else if (v.endsWith("%")) inp.value = (h * parseFloat(v) / 100).toFixed(4);
-    return;
-  }
-  inp.value = v;
-  inp.focus();
 }
 
 async function submitOrder(token) {
@@ -956,8 +985,10 @@ async function doBuy(token) {
     const amt = $("orderAmt").value.trim();
     const value = orderWei(amt);
     if (!value) throw new Error("Enter a CHZ amount.");
-    const nav = BigInt(await ethCall(token, SEL.navWad));
-    const minOut = (value * 98n) / nav; // 2% slippage guard (token wei; value and nav both 1e18-scaled)
+    const [navHex, feeHex] = await Promise.all([ethCall(token, SEL.navWad), ethCall(token, SEL.buyFeeBps)]);
+    const nav = BigInt(navHex), fee = BigInt(feeHex);
+    // expected tokens = CHZ after the buy fee / NAV; accept up to 2% fewer
+    const minOut = (value * (10000n - fee) * 98n * 10n ** 18n) / (10000n * 100n * nav);
     const acc = await ensureChain();
     const data = SEL.buy + toU256(acc) + toU256("0x" + minOut.toString(16));
     const tx = await pv().request({
@@ -972,7 +1003,7 @@ async function doBuy(token) {
     await updateWalletUi();
     if (view === "profile") await loadPortfolio();
     else setTimeout(() => refreshTokenPanel({ token }), 15000);
-  } catch (e) { msg.className = "msg err"; msg.textContent = (e.message ?? "failed").slice(0, 160); }
+  } catch (e) { msg.className = "msg err"; msg.textContent = txErrMsg(e); }
 }
 
 async function doSell(token) {
@@ -982,8 +1013,10 @@ async function doSell(token) {
     const amtW = orderWei(amt);
     if (!amtW) throw new Error("Enter a token amount.");
     const acc = await ensureChain();
-    const nav = BigInt(await ethCall(token, SEL.navWad));
-    const minChz = (amtW * nav * 98n) / 100n / 10n ** 18n; // 2% slippage guard
+    const [navHex, feeHex] = await Promise.all([ethCall(token, SEL.navWad), ethCall(token, SEL.sellFeeBps)]);
+    const nav = BigInt(navHex), fee = BigInt(feeHex);
+    // expected CHZ = tokens x NAV less the sell fee; accept up to 2% less
+    const minChz = (amtW * nav * (10000n - fee) * 98n) / (10n ** 18n * 10000n * 100n);
     const data = SEL.sell + toU256("0x" + amtW.toString(16)) + toU256("0x" + acc.slice(2).toLowerCase().padStart(64, "0")) + toU256("0x" + minChz.toString(16));
     const tx = await pv().request({
       method: "eth_sendTransaction",
@@ -997,14 +1030,14 @@ async function doSell(token) {
     await updateWalletUi();
     if (view === "profile") await loadPortfolio();
     else setTimeout(() => refreshTokenPanel({ token }), 15000);
-  } catch (e) { msg.className = "msg err"; msg.textContent = (e.message ?? "failed").slice(0, 160); }
+  } catch (e) { msg.className = "msg err"; msg.textContent = txErrMsg(e); }
 }
 
 async function loadStats() {
   try {
     const [b, stats, closeData] = await Promise.all([
       rpc("eth_getBalance", [CORE, "latest"]).catch(() => "0x0"),
-      fetch("/api/stats").then((x) => x.json()).catch(() => null),
+      chainStats().catch(() => null),
       fetch("/api/close").then((x) => x.json()).catch(() => null),
     ]);
     const nPlayers = Object.keys(registry.byId ?? {}).length;
@@ -1043,6 +1076,30 @@ async function loadStats() {
       $("stats").before(b);
     }
   } catch {}
+}
+
+// Pool, treasury and funding of every token with supply, read live.
+async function chainStats() {
+  const big = (x) => (x && x !== "0x" ? BigInt(x) : 0n);
+  const tokens = Object.values(registry.byId ?? {}).filter((r) => r.token);
+  const res = await rpcBatch([
+    ["eth_getBalance", [CORE, "latest"]], ["eth_call", [{ to: CORE, data: SEL.treasuryBalance }, "latest"]],
+    ...tokens.map((t) => ["eth_call", [{ to: t.token, data: SEL.totalSupply }, "latest"]]),
+  ]);
+  if (res[0] == null) throw new Error("RPC unavailable");
+  const coreBal = big(res[0]), treasury = big(res[1]);
+  const supplied = tokens.map((t, k) => ({ ...t, supply: big(res[k + 2]) })).filter((t) => t.supply > 0n);
+  const r2 = await rpcBatch(supplied.flatMap((t) => [
+    ["eth_call", [{ to: t.token, data: SEL.reserveWad }, "latest"]],
+    ["eth_call", [{ to: CORE, data: SEL.targetNavOf + t.token.slice(2).toLowerCase().padStart(64, "0") }, "latest"]],
+  ]));
+  let target = 0n, reserve = 0n;
+  supplied.forEach((t, i) => { reserve += big(r2[2 * i]); target += (t.supply * big(r2[2 * i + 1])) / 10n ** 18n; });
+  return {
+    poolBalance: (coreBal > treasury ? coreBal - treasury : 0n).toString(), treasuryBalance: treasury.toString(),
+    outstandingNeed: (target > reserve ? target - reserve : 0n).toString(),
+    fundedRatio: target > 0n ? Number((reserve * 10000n) / target) / 10000 : 1,
+  };
 }
 
 function showMarket() {
@@ -1114,28 +1171,29 @@ async function chainPortfolio(addr) {
   const holds = [];
   tokens.forEach((t, k) => { const b = res[k] && res[k] !== "0x" ? BigInt(res[k]) : 0n; if (b > 0n) holds.push({ ...t, balance: b }); });
   const chz = BigInt(res[tokens.length] ?? 0);
-  const fromBlock = "0x" + Math.max(0, Number(res[tokens.length + 1]) - LOG_WINDOW).toString(16);
-  // 2. fills for held tokens (cost basis, realized), NAVs, and queued orders
-  const logCalls = holds.flatMap((h) => [
-    ["eth_getLogs", [{ address: h.token, fromBlock, topics: [TOPIC.bought, pad] }]],
-    ["eth_getLogs", [{ address: h.token, fromBlock, topics: [TOPIC.sold, pad] }]],
-  ]);
+  // 2. fills (cost basis, realized) and queued orders since the core was
+  //    deployed, in RPC-sized block windows; NAVs of held tokens
+  const latest = Number(res[tokens.length + 1]);
+  const wins = [];
+  for (let f = DEPLOY_BLOCK; f <= latest; f += LOG_WINDOW) wins.push({ fromBlock: "0x" + f.toString(16), toBlock: "0x" + Math.min(latest, f + LOG_WINDOW - 1).toString(16) });
   const r2 = await rpcBatch([
-    ...logCalls,
+    ...wins.map((w) => ["eth_getLogs", [{ ...w, topics: [[TOPIC.bought, TOPIC.sold], pad] }]]),
+    ...wins.map((w) => ["eth_getLogs", [{ ...w, topics: [[TOPIC.buyQueued, TOPIC.sellQueued], null, pad] }]]),
     ...holds.map((h) => ["eth_call", [{ to: h.token, data: SEL.navWad }, "latest"]]),
-    ["eth_getLogs", [{ fromBlock, topics: [[TOPIC.buyQueued, TOPIC.sellQueued], null, pad] }]],
   ]);
+  if (r2.slice(0, 2 * wins.length).some((x) => x == null)) throw new Error("could not read trade history from the RPC");
+  const held = new Map(holds.map((h) => [h.token.toLowerCase(), h]));
   const fills = [];
-  holds.forEach((h, i) => {
-    for (const [k, kind] of [[0, "buy"], [1, "sell"]]) for (const l of r2[2 * i + k] ?? []) {
-      const w = [0, 1, 2].map((j) => word(l.data, j));
-      fills.push({ kind, token: h.token, symbol: h.symbol, name: h.name, espnId: h.espnId,
-        chz: kind === "buy" ? w[0] : w[1], tokens: kind === "buy" ? w[1] : w[0], nav: w[2],
-        tx: l.transactionHash, block: Number(l.blockNumber) });
-    }
-    const n = r2[logCalls.length + i];
-    h.nav = n && n !== "0x" ? BigInt(n) : 0n;
-  });
+  for (const l of r2.slice(0, wins.length).flat()) {
+    const h = held.get(l.address.toLowerCase());
+    if (!h) continue; // sold out, or not a registered token
+    const kind = l.topics[0] === TOPIC.bought ? "buy" : "sell";
+    const w = [0, 1, 2].map((j) => word(l.data, j));
+    fills.push({ kind, token: h.token, symbol: h.symbol, name: h.name, espnId: h.espnId,
+      chz: kind === "buy" ? w[0] : w[1], tokens: kind === "buy" ? w[1] : w[0], nav: w[2],
+      tx: l.transactionHash, block: Number(l.blockNumber) });
+  }
+  holds.forEach((h, i) => { const n = r2[2 * wins.length + i]; h.nav = n && n !== "0x" ? BigInt(n) : 0n; });
   const holdings = holds.map((h) => {
     const my = fills.filter((f) => f.token === h.token);
     const invested = my.filter((f) => f.kind === "buy").reduce((s, f) => s + f.chz, 0n);
@@ -1148,7 +1206,7 @@ async function chainPortfolio(addr) {
   // queued orders not yet claimed (order still non-zero)
   const byToken = new Map(tokens.map((t) => [t.token.toLowerCase(), t]));
   const keys = new Map();
-  for (const l of r2.at(-1) ?? []) {
+  for (const l of r2.slice(wins.length, 2 * wins.length).flat()) {
     const t = byToken.get(l.address.toLowerCase());
     if (t) keys.set(`${t.token}|${Number(BigInt(l.topics[3]))}`, { t, epoch: Number(BigInt(l.topics[3])) });
   }
@@ -1196,7 +1254,7 @@ function renderProfile() {
   const pnlBig = BigInt(pnl);
   const pnlCls = pnlBig > 0n ? "up" : pnlBig < 0n ? "down" : "flat";
   const rows = holdings.map((h) => `
-    <tr class="row" onclick="select('${h.espnId ?? ""}');showMarket()">
+    <tr class="row" onclick="showMarket();openPlayer('${h.espnId ?? ""}')">
       <td class="nm">${esc(h.symbol)} <span class="tok">${esc(h.name)}</span></td>
       <td class="num">${eth(BigInt(h.balance), 6)}</td>
       <td class="num">${eth(BigInt(h.nav), 4)}</td>
@@ -1223,7 +1281,7 @@ function renderProfile() {
       <span class="dot" id="pfDot"></span>
       <span class="name">${account.slice(0, 6)}…${account.slice(-4)}</span>
       <span class="spacer"></span>
-      <button class="ghost" onclick="renderProfile()">Refresh</button>
+      <button class="ghost" onclick="loadPortfolio()">Refresh</button>
       <button class="ghost" onclick="disconnectWallet()">Disconnect</button>
     </div>
     <div class="pf-kv">
@@ -1234,7 +1292,7 @@ function renderProfile() {
       <div class="cell"><div class="k">Net PnL</div><div class="v ${pnlCls}">${pnlBig >= 0n ? "+" : ""}${(Number(pnlBig) / 1e18).toFixed(4)} CHZ</div></div>
     </div>
     <h2>Holdings (${holdings.length})</h2>
-    ${holdings.length ? `<table><thead><tr><th>Token</th><th class="num">Balance</th><th class="num">NAV</th><th class="num">Value</th><th class="num">Invested</th><th class="num">Realized</th><th class="num">PnL</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">No player tokens yet — buy one from the index table.</div>`}
+    ${holdings.length ? `<table><thead><tr><th>Token</th><th class="num">Balance</th><th class="num">NAV</th><th class="num">Value</th><th class="num">Invested</th><th class="num">Realized</th><th class="num">PnL</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">No player tokens yet — buy one from the market table.</div>`}
     ${queued ? `<h2>Queued orders (live matches)</h2><div class="qorders">${queued}</div>` : ""}
     <h2>Trade history (on-chain fills)</h2>
     <div class="fills">${fills || `<div class="empty">No fills yet.</div>`}</div>`;
@@ -1282,6 +1340,14 @@ function toggleTheme() {
   applyTheme(next);
 }
 
+// a rejected or failed transaction, in words a trader can act on
+function txErrMsg(e) {
+  if (e?.code === 4001) return "Transaction rejected in your wallet.";
+  const m = e?.message ?? "failed";
+  if (/insufficient funds/i.test(m)) return "Not enough CHZ to cover the amount plus the network fee.";
+  if (/Slippage/.test(m)) return "The price moved more than 2% before your order landed. Try again.";
+  return m.slice(0, 160);
+}
 function walletErrMsg(e) {
   if (e?.code === 4001) return "Connection request rejected in your wallet.";
   if (e?.code === -32002) return "A request is already pending — open your wallet extension.";
@@ -1323,6 +1389,7 @@ async function connectWith(idx) {
     account = await ensureChain(w.provider);
     activeProvider = w.provider;
     activeWalletName = w.info.name ?? "Wallet";
+    watchProvider(w.provider);
     localStorage.setItem("fspi_wallet_rdns", w.info.rdns ?? "");
     await updateWalletUi();
     toast(`Connected via ${activeWalletName}`, "ok");
@@ -1336,6 +1403,7 @@ async function connectWallet() { openConnect(); }
 
 function disconnectWallet() {
   account = null;
+  walletWei = holdWei = null; picked = null;
   activeProvider = null;
   localStorage.removeItem("fspi_wallet_rdns");
   updateWalletUi();
@@ -1373,11 +1441,37 @@ async function updateWalletUi() {
     : `${activeWalletName} · wrong network — reconnect to switch`;
 }
 
+// open a player's detail, switching to their tour's table first
+function openPlayer(id) {
+  const t = levels.players?.[id]?.tour;
+  if (t && t !== tour) setTour(t);
+  select(id);
+}
+// account / network changes in the wallet: subscribe once per provider
+const watched = new WeakSet();
+function watchProvider(p) {
+  if (!p?.on || watched.has(p)) return;
+  watched.add(p);
+  p.on("accountsChanged", async (a) => {
+    if (p !== pv()) return;
+    account = a?.[0] ?? null;
+    walletWei = holdWei = null; picked = null;
+    if (!account) activeProvider = null;
+    await updateWalletUi();
+    if (view === "profile") await showProfile();
+    else if (sel && registry.byId?.[sel]?.token) await refreshTokenPanel(registry.byId[sel]);
+  });
+  p.on("chainChanged", async () => {
+    if (p !== pv()) return;
+    await updateWalletUi();
+    if (view === "profile") await loadPortfolio();
+  });
+}
+
 function quickTrade(token, symbol) {
   showMarket();
-  // open the player detail for this token
-  const entry = Object.entries(registry.byId ?? {}).find(([, v]) => v.token === token);
-  if (entry) { select(entry[0]); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  const entry = Object.entries(registry.byId ?? {}).find(([, v]) => v.token?.toLowerCase() === token.toLowerCase());
+  if (entry) { openPlayer(entry[0]); window.scrollTo({ top: 0, behavior: "smooth" }); }
 }
 
 async function connectSaved() {
@@ -1394,6 +1488,7 @@ async function connectSaved() {
       account = accs[0];
       activeProvider = prov;
       activeWalletName = w?.info?.name ?? "Wallet";
+      watchProvider(prov);
       await updateWalletUi();
     }
   } catch {}
@@ -1409,17 +1504,7 @@ window.addEventListener("DOMContentLoaded", () => {
   await loadAll();
   await render();
   await loadStats();
-  const prov = () => activeProvider ?? window.ethereum;
-  prov()?.on?.("accountsChanged", async (a) => {
-    account = a?.[0] ?? null;
-    if (!account) { activeProvider = null; }
-    await updateWalletUi();
-    if (view === "profile") await showProfile();
-  });
-  prov()?.on?.("chainChanged", async () => {
-    await updateWalletUi();
-    if (view === "profile") await loadPortfolio();
-  });
+  watchProvider(activeProvider ?? window.ethereum);
   if (location.hash === "#profile") showProfile();
 })();
 </script>

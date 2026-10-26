@@ -57,7 +57,15 @@
   [data-theme="night"] #themeBtn .sun { display: block; } [data-theme="night"] #themeBtn .moon { display: none; }
 
   .page { max-width: 1280px; margin: 0 auto; padding: 40px 24px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
-  @media (max-width: 960px) { .page { grid-template-columns: 1fr; gap: 24px; } nav.toc { display: none; } }
+  @media (max-width: 960px) { .page { grid-template-columns: minmax(0, 1fr); gap: 24px; } nav.toc { display: none; } }
+  @media (max-width: 640px) {
+    header { padding: 0 16px; gap: 4px; }
+    .brand h1 em { display: none; }
+    .navlink { padding: 8px 6px; }
+    .page { padding: 28px 16px 64px; }
+    .doc code { white-space: normal; overflow-wrap: anywhere; }
+    table.c { display: block; overflow-x: auto; }
+  }
 
   nav.toc { position: sticky; top: 80px; align-self: start; font-size: 12.5px; }
   nav.toc .cap { font: 500 10px/1 var(--sans); color: var(--ink-3); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px; }
@@ -288,7 +296,7 @@ reserve target = supply × NAV</div>
     </ul>
 
     <h2 id="record">8 · The record</h2>
-    <p>Every artifact needed to audit the index lives in <code>oracle/state/</code> and is served read-only via the UI's API:</p>
+    <p>Every artifact needed to audit the ratings lives in <code>oracle/state/</code> and is served read-only via the UI's API:</p>
     <table class="c">
       <thead><tr><th>File</th><th>Contents</th></tr></thead>
       <tbody>
@@ -304,7 +312,7 @@ reserve target = supply × NAV</div>
     <h2 id="architecture">9 · Architecture & addresses</h2>
     <ul>
       <li><b>Chain.</b> Chiliz Spicy testnet — chainId <code>88882</code>, RPC <code>spicy-rpc.chiliz.com</code>, explorer <code>testnet.chiliscan.com</code>.</li>
-      <li><b>Core</b> <span class="addr">0x6cec3949ca5ae6a8395b0aa4a354047843929c75</span> — the index contract: player registry, oracle-gated level feed with ±25% cap, reserve accounting, fee routing, season reset. Roles: <code>ORACLE_ROLE</code> (level feed), <code>PAUSER_ROLE</code>, admin.</li>
+      <li><b>Core</b> <span class="addr">0x6cec3949ca5ae6a8395b0aa4a354047843929c75</span> — the core contract: player registry, oracle-gated level feed with ±25% cap, reserve accounting, fee routing, season reset. Roles: <code>ORACLE_ROLE</code> (level feed), <code>PAUSER_ROLE</code>, admin.</li>
       <li><b>PlayerToken</b> (implementation <span class="addr">0x9566fa6d6ddc75c8bb202e111c77a4b224274197</span>) — one ERC-20 per player with <code>buy()</code>/<code>sell()</code> mint/burn at NAV, per-token fees, and its own CHZ reserve.</li>
       <li><b>Keeper</b> — the oracle node (<code>oracle/src/run.js</code>): backfill, compute, push, close, fee repair, faucet. 202 players registered and calibrated; watch loop running continuously.</li>
       <li><b>UI</b> — static SPA + a small Node server that serves state files and does read-only on-chain portfolio scans. Wallets connect via EIP-6963; trades are signed by your wallet, never proxied.</li>
@@ -317,7 +325,7 @@ reserve target = supply × NAV</div>
       <li>Single oracle operator — the cap (±25%/push), pausable core and hash-chained closes are the current trust mitigations; a production deployment would add multi-operator oracles and threshold signing.</li>
       <li>Intraday NAV is indicative; only the Official Daily Close is settlement-grade.</li>
       <li><b>Expectation, not strength.</b> The level measures surprise, not absolute quality. A dominant favourite can lose points while winning as expected; an underdog can gain more from one upset than a champion gains from a title defence. The opening rating is calibrated to the ranking snapshot; from then on it moves only through results.</li>
-      <li><b>Token coverage.</b> 197 of the 687 tracked players have live tokens. A player outside the registered set can rank highly on the index before a token is deployed; the market table marks them "soon" and the detail page explains that they are not yet tradeable.</li>
+      <li><b>Token coverage.</b> 197 of the 687 tracked players have live tokens. A player outside the registered set can rank highly before a token is deployed; the market table marks them "soon" and the detail page explains that they are not yet tradeable.</li>
       <li>Not financial advice; no real-money value.</li>
     </ul>
 
