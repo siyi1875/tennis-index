@@ -433,7 +433,7 @@ const CORE = "0x6cec3949ca5ae6a8395b0aa4a354047843929c75"; // TennisIndex core (
 const RPC = "https://spicy-rpc.chiliz.com";
 const CHAIN_ID_HEX = "0x15b32"; // 88882 = Chiliz Spicy testnet
 const CHAIN_NAME = "Chiliz Spicy Testnet";
-const EXPLORER = "https://spicy.chiliscan.com";
+const EXPLORER = "https://testnet.chiliscan.com";
 
 let registry = null, levels = null, history = null;
 let tour = "atp", sel = null, sortKey = "level", sortDir = -1;
@@ -452,6 +452,19 @@ async function rpc(method, params) {
   return j.result;
 }
 async function ethCall(to, data) { return await rpc("eth_call", [{ to, data }, "latest"]); }
+// Gas and fee fields for eth_sendTransaction. Wallets have no fee oracle for
+// Spicy and show "fee unavailable" without them; a failed estimate is left to
+// the wallet, which then shows the revert.
+async function withGas(tx) {
+  try {
+    const [gas, block, tip] = await Promise.all([
+      rpc("eth_estimateGas", [tx]), rpc("eth_getBlockByNumber", ["latest", false]), rpc("eth_maxPriorityFeePerGas", []),
+    ]);
+    const hex = (n) => "0x" + n.toString(16);
+    const t = BigInt(tip);
+    return { ...tx, gas: hex((BigInt(gas) * 13n) / 10n), maxPriorityFeePerGas: hex(t), maxFeePerGas: hex(BigInt(block.baseFeePerGas) * 2n + t) };
+  } catch { return tx; }
+}
 
 async function loadAll() {
   const [r, l, h] = await Promise.all([
@@ -772,7 +785,7 @@ async function claimOrder(token, epoch) {
   try {
     const acc = await ensureChain();
     const data = SEL.claim + epoch.toString(16).padStart(64, "0") + acc.slice(2).toLowerCase().padStart(64, "0");
-    const tx = await pv().request({ method: "eth_sendTransaction", params: [{ from: acc, to: token, value: "0x0", data }] });
+    const tx = await pv().request({ method: "eth_sendTransaction", params: [await withGas({ from: acc, to: token, value: "0x0", data })] });
     if (msg) { msg.className = "msg ok"; msg.textContent = `Claim sent: ${tx.slice(0, 10)}…`; }
     else toast(`Claim sent: ${tx.slice(0, 10)}…`);
     tokenCache.delete(token);
@@ -886,7 +899,7 @@ async function doBuy(token) {
     const data = SEL.buy + toU256(acc) + toU256("0x" + minOut.toString(16));
     const tx = await pv().request({
       method: "eth_sendTransaction",
-      params: [{ from: acc, to: token, value: "0x" + value.toString(16), data }],
+      params: [await withGas({ from: acc, to: token, value: "0x" + value.toString(16), data })],
     });
     msg.className = "msg ok";
     msg.textContent = tokenQueued
@@ -911,7 +924,7 @@ async function doSell(token) {
     const data = SEL.sell + toU256("0x" + amtW.toString(16)) + toU256("0x" + acc.slice(2).toLowerCase().padStart(64, "0")) + toU256("0x" + minChz.toString(16));
     const tx = await pv().request({
       method: "eth_sendTransaction",
-      params: [{ from: acc, to: token, value: "0x0", data }],
+      params: [await withGas({ from: acc, to: token, value: "0x0", data })],
     });
     msg.className = "msg ok";
     msg.textContent = tokenQueued
@@ -1133,7 +1146,7 @@ function renderProfile() {
   const fills = (d.fills ?? []).map((f) => {
     const ts = f.ts ? new Date(f.ts * 1000).toISOString().slice(0, 10) : "";
     const px = Number(BigInt(f.nav)) / 1e18;
-    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 6)} tok @ ${px.toFixed(2)}</span><a class="txlink" href="https://spicy.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
+    return `<div class="ev"><span class="d">${ts}</span><span class="m"><span class="tag ${f.kind === "buy" ? "win" : "loss"}">${f.kind === "buy" ? "BUY" : "SELL"}</span> <b>${esc(f.symbol)}</b> <span class="tok">${esc(f.name)}</span></span><span class="amt ${f.kind === "buy" ? "down" : "up"}">${f.kind === "buy" ? "−" : "+"}${eth(BigInt(f.chz), 4)} CHZ</span><span class="px">${eth(BigInt(f.tokens), 6)} tok @ ${px.toFixed(2)}</span><a class="txlink" href="https://testnet.chiliscan.com/tx/${f.tx}" target="_blank" rel="noopener">${f.tx.slice(0, 10)}…</a></div>`;
   }).join("");
   // orders placed during a live match: filled at the post-match price, then claimed
   const queued = (d.pending ?? []).map((o) => {
