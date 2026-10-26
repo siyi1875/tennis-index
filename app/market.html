@@ -427,7 +427,7 @@ const SEL = {
   buy: "0xcce7ec13", sell: "0x67cdf6c9", balanceOf: "0x70a08231",
   // live-match queue
   tradeStatus: "0xc229550c", haltFrom: "0xfb3e7511", epoch: "0x900cf0cf",
-  orders: "0xbc908963", claim: "0x1790c562",
+  orders: "0xbc908963", claim: "0x1790c562", batches: "0x3fef78cb",
 };
 const CORE = "0x6cec3949ca5ae6a8395b0aa4a354047843929c75"; // TennisIndex core (oracle/state/deployments.json)
 const RPC = "https://spicy-rpc.chiliz.com";
@@ -829,6 +829,8 @@ async function ensureChain(prov) {
 }
 
 async function refreshTokenPanel(reg) {
+  // post-trade refreshes pass only { token }: look up the rest (symbol) here
+  if (!reg.symbol) reg = Object.values(registry.byId ?? {}).find((v) => v.token?.toLowerCase() === reg.token.toLowerCase()) ?? reg;
   try {
     const [nav, sup, res] = await Promise.all([
       ethCall(reg.token, SEL.navWad), ethCall(reg.token, SEL.totalSupply), ethCall(reg.token, SEL.reserveWad),
@@ -994,13 +996,115 @@ async function showProfile() {
 async function loadPortfolio() {
   $("pfPanel").innerHTML = `<div class="empty">Loading portfolio…</div>`;
   try {
-    pfData = await fetch(`/api/portfolio?address=${account}`).then((r) => r.json());
-    if (pfData.error) throw new Error(pfData.error);
+    // the local server answers /api/portfolio; the static (Pages) build has
+    // no server, so read the chain from the browser instead
+    pfData = await fetch(`/api/portfolio?address=${account}`).then((r) => r.json()).catch(() => null);
+    if (!pfData || pfData.error) pfData = await chainPortfolio(account);
   } catch (e) {
     $("pfPanel").innerHTML = `<div class="empty">Portfolio load failed: ${esc(e.message)}</div>`;
     return;
   }
   renderProfile();
+}
+
+// Browser port of buildPortfolio in app/server.js: same reads, raw JSON-RPC.
+const TOPIC = {
+  bought: "0x7ce543d1780f3bdc3dac42da06c95da802653cd1b212b8d74ec3e3c33ad7095c",
+  sold: "0x9be8a5ca22b7e6e81f04b5879f0248227bb770114291bd47dfaee4c3a82ad60e",
+  buyQueued: "0x0482403b9e1faa9701492b45acd37533902f8470c3d2edc906394e53545c04f8",
+  sellQueued: "0x8874ab6931d6bcc77236c6993c0bb4aa41ca4a62556d405c7cfa7c4ee0649942",
+};
+const LOG_WINDOW = 200_000; // Spicy RPC caps getLogs at 250k blocks
+async function rpcBatch(calls) {
+  const out = [];
+  for (let i = 0; i < calls.length; i += 50) {
+    const body = calls.slice(i, i + 50).map(([method, params], k) => ({ jsonrpc: "2.0", id: i + k, method, params }));
+    const r = await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!Array.isArray(j)) throw new Error(j.error?.message ?? "RPC batch failed");
+    for (const x of j) out[x.id] = x.error ? null : x.result;
+  }
+  return out;
+}
+async function chainPortfolio(addr) {
+  const a = addr.toLowerCase(), pad = "0x" + a.slice(2).padStart(64, "0");
+  const tokens = Object.entries(registry.byId ?? {}).map(([id, r]) => ({ espnId: id, ...r })).filter((r) => r.token);
+  const word = (hex, k) => BigInt("0x" + (hex.slice(2 + 64 * k, 2 + 64 * (k + 1)) || "0"));
+  // 1. balances of every token, plus the wallet's CHZ and the block height
+  const res = await rpcBatch([
+    ...tokens.map((t) => ["eth_call", [{ to: t.token, data: SEL.balanceOf + pad.slice(2) }, "latest"]]),
+    ["eth_getBalance", [a, "latest"]], ["eth_blockNumber", []],
+  ]);
+  const holds = [];
+  tokens.forEach((t, k) => { const b = res[k] && res[k] !== "0x" ? BigInt(res[k]) : 0n; if (b > 0n) holds.push({ ...t, balance: b }); });
+  const chz = BigInt(res[tokens.length] ?? 0);
+  const fromBlock = "0x" + Math.max(0, Number(res[tokens.length + 1]) - LOG_WINDOW).toString(16);
+  // 2. fills for held tokens (cost basis, realized), NAVs, and queued orders
+  const logCalls = holds.flatMap((h) => [
+    ["eth_getLogs", [{ address: h.token, fromBlock, topics: [TOPIC.bought, pad] }]],
+    ["eth_getLogs", [{ address: h.token, fromBlock, topics: [TOPIC.sold, pad] }]],
+  ]);
+  const r2 = await rpcBatch([
+    ...logCalls,
+    ...holds.map((h) => ["eth_call", [{ to: h.token, data: SEL.navWad }, "latest"]]),
+    ["eth_getLogs", [{ fromBlock, topics: [[TOPIC.buyQueued, TOPIC.sellQueued], null, pad] }]],
+  ]);
+  const fills = [];
+  holds.forEach((h, i) => {
+    for (const [k, kind] of [[0, "buy"], [1, "sell"]]) for (const l of r2[2 * i + k] ?? []) {
+      const w = [0, 1, 2].map((j) => word(l.data, j));
+      fills.push({ kind, token: h.token, symbol: h.symbol, name: h.name, espnId: h.espnId,
+        chz: kind === "buy" ? w[0] : w[1], tokens: kind === "buy" ? w[1] : w[0], nav: w[2],
+        tx: l.transactionHash, block: Number(l.blockNumber) });
+    }
+    const n = r2[logCalls.length + i];
+    h.nav = n && n !== "0x" ? BigInt(n) : 0n;
+  });
+  const holdings = holds.map((h) => {
+    const my = fills.filter((f) => f.token === h.token);
+    const invested = my.filter((f) => f.kind === "buy").reduce((s, f) => s + f.chz, 0n);
+    const realized = my.filter((f) => f.kind === "sell").reduce((s, f) => s + f.chz, 0n);
+    const value = (h.balance * h.nav) / 10n ** 18n;
+    return { espnId: h.espnId, symbol: h.symbol, name: h.name, token: h.token,
+      balance: h.balance.toString(), nav: h.nav.toString(), value: value.toString(),
+      invested: invested.toString(), realized: realized.toString(), pnl: (value + realized - invested).toString() };
+  });
+  // queued orders not yet claimed (order still non-zero)
+  const byToken = new Map(tokens.map((t) => [t.token.toLowerCase(), t]));
+  const keys = new Map();
+  for (const l of r2.at(-1) ?? []) {
+    const t = byToken.get(l.address.toLowerCase());
+    if (t) keys.set(`${t.token}|${Number(BigInt(l.topics[3]))}`, { t, epoch: Number(BigInt(l.topics[3])) });
+  }
+  const ks = [...keys.values()];
+  const ep = (e) => e.toString(16).padStart(64, "0");
+  const r3 = await rpcBatch(ks.flatMap(({ t, epoch }) => [
+    ["eth_call", [{ to: t.token, data: SEL.orders + ep(epoch) + pad.slice(2) }, "latest"]],
+    ["eth_call", [{ to: t.token, data: SEL.batches + ep(epoch) }, "latest"]],
+  ]));
+  const pending = [];
+  ks.forEach(({ t, epoch }, i) => {
+    const o = r3[2 * i], b = r3[2 * i + 1];
+    if (!o || !b) return;
+    if (word(o, 1) === 0n && word(o, 2) === 0n) return; // claimed
+    pending.push({ espnId: t.espnId, symbol: t.symbol, name: t.name, token: t.token, epoch,
+      paid: word(o, 0).toString(), buyChz: word(o, 1).toString(), sellTokens: word(o, 2).toString(),
+      settled: word(b, 6) !== 0n, nav: word(b, 4).toString(), buyNav: word(b, 5).toString(), refunded: word(b, 7) !== 0n });
+  });
+  pending.sort((x, y) => x.symbol.localeCompare(y.symbol) || x.epoch - y.epoch);
+  // timestamps for the fills shown
+  fills.sort((x, y) => y.block - x.block);
+  const shown = fills.slice(0, 60);
+  const blocks = [...new Set(shown.map((f) => f.block))];
+  const r4 = await rpcBatch(blocks.map((n) => ["eth_getBlockByNumber", ["0x" + n.toString(16), false]]));
+  const ts = new Map(blocks.map((n, i) => [n, r4[i] ? Number(r4[i].timestamp) : null]));
+  const sum = (k) => holdings.reduce((s, h) => s + BigInt(h[k]), 0n);
+  const [tv, ti, tr] = [sum("value"), sum("invested"), sum("realized")];
+  return {
+    address: addr, chz: chz.toString(), holdings, pending,
+    fills: shown.map((f) => ({ ...f, chz: f.chz.toString(), tokens: f.tokens.toString(), nav: f.nav.toString(), ts: ts.get(f.block) ?? null })),
+    totals: { value: tv.toString(), invested: ti.toString(), realized: tr.toString(), pnl: (tv + tr - ti).toString() },
+  };
 }
 
 function pnlSpan(weiStr) {
