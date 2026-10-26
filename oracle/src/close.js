@@ -1,5 +1,5 @@
 /// Official Daily Close: freezes the official settlement levels for a day.
-/// Mirrors FSPI's benchmark practice — intraday pushes are indicative; the
+/// Intraday pushes are indicative; the
 /// close is the one authoritative print, sha256-hashed so any settlement
 /// dispute can be re-verified from the match trail + levels.
 import { createHash } from "node:crypto";

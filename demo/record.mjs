@@ -41,7 +41,7 @@ new Promise((resolve) => {
     uuid: "demo-local-signer-0000-0000",
     name: "Demo Wallet (local signer)",
     icon: "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="14" fill="%2312e29a"/><text x="32" y="42" font-size="30" text-anchor="middle" fill="%23071a10" font-family="monospace">D</text></svg>'),
-    rdns: "demo.fspi.local",
+    rdns: "demo.courtline.local",
   };
   const announce = () => window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info, provider: prov }) }));
   window.addEventListener("eip6963:requestProvider", announce);
@@ -87,7 +87,7 @@ try {
 await p.waitForTimeout(1800);
 await step(p, "connected");
 
-// open ATP-SIN
+// open M-SIN
 await p.fill("#search", "Sinner");
 await p.waitForTimeout(700);
 await step(p, "search");

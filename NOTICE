@@ -1,0 +1,11 @@
+Courtline — third-party components
+
+- OpenZeppelin Contracts v5.1.0 (contracts/lib/openzeppelin-contracts), MIT License,
+  Copyright (c) 2016-2024 Zeppelin Group Ltd. See contracts/lib/openzeppelin-contracts/LICENSE.
+- Inter and JetBrains Mono typefaces, loaded from Google Fonts, SIL Open Font License 1.1.
+- ethers.js (oracle/node_modules), MIT License.
+
+Match results are read from public ESPN endpoints for this testnet demo. Courtline is not
+affiliated with, endorsed by or licensed by ESPN, the ATP, the WTA or any player.
+
+This repository has no licence of its own yet; until one is added, all rights are reserved.

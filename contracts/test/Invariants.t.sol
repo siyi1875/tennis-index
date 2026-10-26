@@ -30,7 +30,7 @@ contract PlayerTokenInvariants is Test {
         core.heartbeat(); // trading needs a live oracle
         core.topUp{value: 1_000_000 ether}();
         vm.prank(admin);
-        seedId = core.addPlayer("ATP-INV", 1, BASE);
+        seedId = core.addPlayer("M-INV", 1, BASE);
         tok = PlayerToken(payable(core.player(seedId).token));
         // Fuzz the handlers below, not the contracts directly: direct calls
         // with random senders and zero value almost all revert (roles,

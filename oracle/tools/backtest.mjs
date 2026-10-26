@@ -63,7 +63,7 @@ function holdPnl(level, spend = 10, feeBps = 100) {
   return { tokens, proceeds, profit: proceeds - spend, ret: (proceeds / spend - 1) * 100 };
 }
 
-console.log(`\n=== FSPI Tennis Index — season backtest ===`);
+console.log(`\n=== Courtline — season backtest ===`);
 console.log(`window: ${SEASON_START} .. latest cached match\n`);
 
 const matchesJson = JSON.parse(fs.readFileSync(path.join(ROOT, "state", "matches-2026.json"), "utf8"));

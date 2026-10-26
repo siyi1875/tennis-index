@@ -22,7 +22,7 @@ contract TennisIndexTest is Test {
 
     function _add(uint128 level) internal returns (uint256 id) {
         vm.prank(admin);
-        id = core.addPlayer("ATP-TST", 1, level);
+        id = core.addPlayer("M-TST", 1, level);
     }
 
     function test_addPlayerDeploysToken() public {
@@ -35,8 +35,8 @@ contract TennisIndexTest is Test {
         assertEq(tok.core(), address(core));
         assertEq(core.tokenLevel(p.token), BASE);
         assertEq(tok.navWad(), 100e18); // 100 CHZ at base; s==0 NAV reads level from core
-        assertEq(tok.symbol(), "ATP-TST");
-        assertEq(tok.name(), "FSPI Tennis ATP-TST");
+        assertEq(tok.symbol(), "M-TST");
+        assertEq(tok.name(), "Tennis Form M-TST");
     }
 
     function test_addPlayerOnlyAdmin() public {
@@ -165,7 +165,7 @@ contract TennisIndexTest is Test {
         assertEq(second.sellFeeBps(), 200);
         // batched registration uses the defaults too
         string[] memory syms = new string[](1);
-        syms[0] = "WTA-B";
+        syms[0] = "W-B";
         uint8[] memory tours = new uint8[](1);
         tours[0] = 2;
         uint128[] memory lv = new uint128[](1);
