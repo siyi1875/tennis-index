@@ -829,6 +829,8 @@ async function ensureChain(prov) {
 }
 
 async function refreshTokenPanel(reg) {
+  // post-trade refreshes pass only { token }: look up the rest (symbol) here
+  if (!reg.symbol) reg = Object.values(registry.byId ?? {}).find((v) => v.token?.toLowerCase() === reg.token.toLowerCase()) ?? reg;
   try {
     const [nav, sup, res] = await Promise.all([
       ethCall(reg.token, SEL.navWad), ethCall(reg.token, SEL.totalSupply), ethCall(reg.token, SEL.reserveWad),
