@@ -7,6 +7,7 @@ node_modules/
 oracle/cache/
 oracle/watch.log
 oracle/faucetbot/
+oracle/.oracle-key
 
 contracts/out/
 contracts/cache/

@@ -22,7 +22,7 @@ import { buildClose } from "./close.js";
 import { saveJson, loadJson, serializeState } from "./state.js";
 import { seededLookup } from "./seeds.js";
 import { haltPlan, unscoredPlayers, haltActions } from "./live.js";
-import { getWallet, getCore, TX_OVERRIDES, RPC_URL, DEPLOYMENTS_FILE, saveDeployments } from "./chain.js";
+import { getWallet, getCore, TX_OVERRIDES, RPC_URL, DEPLOYMENTS_FILE, saveDeployments, loadDeployments } from "./chain.js";
 import { publishPagesData } from "./publish.js";
 import { ethers } from "ethers";
 
@@ -38,7 +38,7 @@ const SEEDS_FILE = `seeds-${SEASON}.json`;
 
 async function main() {
   const cmd = process.argv[2] || "help";
-  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, halts, seasonreset, watch, deployinfo, publish, help };
+  const commands = { backfill, compute, report, register, push, rebase, close, fees, treasury, halts, seasonreset, watch, deployinfo, oracleinfo, grantoracle, fundoracle, publish, help };
   if (commands[cmd]) await commands[cmd](process.argv[3]);
   else commands.help();
 }
@@ -361,6 +361,10 @@ async function maybeClaimFaucet() {
   const addr = await fw.getAddress();
   const { spawnSync } = await import("node:child_process");
   const bot = path.join(__dirname, "..", "faucetbot", "claim2.cjs");
+  if (!fs.existsSync(bot)) {
+    console.log("faucet bot missing; fund the oracle wallet instead");
+    return;
+  }
   const res = spawnSync("node", [bot, addr], { timeout: 120_000, encoding: "utf8" });
   const ok = /Tokens sent successfully/.test(res.stdout ?? "");
   console.log(`faucet claim #${faucetClaimsToday} for ${addr}: ${ok ? "OK" : "FAILED"}`);
@@ -496,8 +500,8 @@ async function maybePublishClose() {
 }
 
 async function publish() {
-  const { repo, triggered } = publishPagesData(SEASON);
-  console.log(`site data published to ${repo}@pages-data${triggered ? "; Pages redeploy started" : " (Pages picks it up on its daily run)"}`);
+  const { repo } = publishPagesData(SEASON);
+  console.log(`site data published to ${repo}@pages-data; Pages deploy triggered by the push`);
 }
 
 /// Once a day, after the official close: refresh the published site data.
@@ -632,8 +636,55 @@ async function deployinfo() {
   console.log(JSON.stringify(d, null, 2));
 }
 
+async function oracleinfo() {
+  const wallet = getWallet();
+  const me = await wallet.getAddress();
+  const core = getCore(wallet);
+  const [balance, oracleRole, adminRole, isOracle, isAdmin, players, last, maxAge, paused] = await Promise.all([
+    wallet.provider.getBalance(me),
+    core.ORACLE_ROLE(),
+    core.DEFAULT_ADMIN_ROLE(),
+    core.hasRole(await core.ORACLE_ROLE(), me),
+    core.hasRole(await core.DEFAULT_ADMIN_ROLE(), me),
+    core.playerCount(),
+    core.lastHeartbeat(),
+    core.heartbeatMaxAge(),
+    core.paused(),
+  ]);
+  const ageMin = last > 0 ? (Date.now() / 1000 - Number(last)) / 60 : null;
+  console.log(JSON.stringify({
+    address: me,
+    balanceChz: ethers.formatEther(balance),
+    core: loadDeployments().core,
+    oracleRole: isOracle,
+    adminRole: isAdmin,
+    players: Number(players),
+    lastHeartbeat: last > 0 ? new Date(Number(last) * 1000).toISOString() : null,
+    heartbeatAgeMin: ageMin === null ? null : Number(ageMin.toFixed(1)),
+    heartbeatMaxAgeMin: Number(maxAge) / 60,
+    paused,
+  }, null, 2));
+}
+
+async function grantoracle(address) {
+  if (!ethers.isAddress(address)) throw new Error("usage: grantoracle <address>");
+  const core = getCore(getWallet());
+  const role = await core.ORACLE_ROLE();
+  const tx = await core.grantRole(role, address, TX_OVERRIDES);
+  await tx.wait();
+  console.log(`ORACLE_ROLE granted to ${address} (tx ${tx.hash})`);
+}
+
+async function fundoracle(address, amount = "20") {
+  if (!ethers.isAddress(address)) throw new Error("usage: fundoracle <address> [CHZ]");
+  const wallet = getWallet();
+  const tx = await wallet.sendTransaction({ to: address, value: ethers.parseEther(String(amount)), ...TX_OVERRIDES });
+  await tx.wait();
+  console.log(`sent ${amount} CHZ to ${address} (tx ${tx.hash})`);
+}
+
 async function help() {
-  console.log(`commands: backfill compute report register push rebase close fees treasury halts seasonreset watch deployinfo publish`);
+  console.log(`commands: backfill compute report register push rebase close fees treasury halts seasonreset watch deployinfo oracleinfo grantoracle fundoracle publish`);
 }
 
 main().catch((e) => {

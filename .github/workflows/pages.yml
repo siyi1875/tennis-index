@@ -2,11 +2,12 @@ name: Publish demo
 
 on:
   push:
-    branches: [main]
+    branches: [main, pages-data]
     paths:
       - "docs/**"
+      - "data/**"
       - ".github/workflows/pages.yml"
-  workflow_dispatch: # the oracle starts this after publishing site data
+  workflow_dispatch:
   schedule:
     - cron: "30 10 * * *" # daily, after the 09:00 UTC close, in case the oracle's trigger failed
 
@@ -27,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       # the oracle publishes current levels, history and closes to the
       # pages-data branch (oracle/src/publish.js); use them when present
       - name: Use the latest site data

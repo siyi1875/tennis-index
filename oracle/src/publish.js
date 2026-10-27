@@ -2,8 +2,8 @@
 // shows current levels, history and closes without commits to main.
 //
 // The branch holds one commit with data/*.json, replaced on every publish
-// (force push), so the repo does not grow. The Pages workflow copies data/
-// over docs/data before deploying; publishing also asks GitHub to run it.
+// (force push), so the repo does not grow. Pushing pages-data triggers the
+// Pages workflow, which copies data/ over docs/data before deploying.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -25,22 +25,32 @@ export const dataFiles = (season) => ({
 });
 
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "pipe", ...opts }).toString().trim();
+const gitValue = (key) => {
+  try { return run("git", ["-C", ROOT, "config", "--get", key]); } catch { return ""; }
+};
 
 export function publishPagesData(season) {
   const remote = run("git", ["-C", ROOT, "remote", "get-url", "origin"]);
+  const name = gitValue("user.name") || "Courtline Oracle";
+  const email = gitValue("user.email") || "oracle@courtline.local";
+  const sshCommand = gitValue("core.sshCommand");
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: name,
+    GIT_AUTHOR_EMAIL: email,
+    GIT_COMMITTER_NAME: name,
+    GIT_COMMITTER_EMAIL: email,
+    ...(sshCommand ? { GIT_SSH_COMMAND: sshCommand } : {}),
+  };
   fs.rmSync(WORK_DIR, { recursive: true, force: true });
   fs.mkdirSync(path.join(WORK_DIR, "data"), { recursive: true });
   for (const [src, dst] of Object.entries(dataFiles(season))) {
     fs.copyFileSync(path.join(STATE_DIR, src), path.join(WORK_DIR, "data", dst));
   }
-  const git = (...a) => run("git", ["-C", WORK_DIR, ...a]);
+  const git = (...a) => run("git", ["-C", WORK_DIR, ...a], { env });
   git("init", "-q", "-b", BRANCH);
   git("add", "data");
   git("commit", "-q", "-m", `Site data ${new Date().toISOString().slice(0, 16)}Z`);
   git("push", "-q", "-f", remote, `HEAD:refs/heads/${BRANCH}`);
-  // ask GitHub to redeploy now (the workflow also runs daily on its own)
-  const repo = remote.replace(/^.*github\.com[:/]/, "").replace(/\.git$/, "");
-  let triggered = true;
-  try { run("gh", ["workflow", "run", "pages.yml", "--repo", repo, "--ref", "main"]); } catch { triggered = false; }
-  return { repo, triggered };
+  return { repo: remote.replace(/^.*github\.com[:/]/, "").replace(/\.git$/, "") };
 }

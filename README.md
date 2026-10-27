@@ -191,6 +191,17 @@ cd ../app && node server.js          # http://localhost:8080
 `contracts/.deploy/env` is gitignored. Only the oracle writer, registration and demo
 scripts need it; the UI and read-only API work without a key. Never use a mainnet key.
 
+For an always-on writer, use a dedicated key instead of the deployer key:
+
+```bash
+cd oracle
+# key file is gitignored and mode 600; ORACLE_PRIVATE_KEY overrides it
+node src/run.js oracleinfo                         # address, balance, role, heartbeat
+node src/run.js grantoracle <oracle-address>       # admin; run on the deployer machine
+node src/run.js fundoracle <oracle-address> 20     # admin; gas + a buffer
+../scripts/oracle-watch.sh                         # foreground watch (5 min)
+```
+
 ### Public demo (GitHub Pages)
 
 ```bash
@@ -208,7 +219,7 @@ carry-over incl. attack replays, 1 invariant suite fuzzing buy/sell/transfer/lev
 change/halt/post-match push/claim handlers: reserve covers full redemption, reserve
 within dust of target, holder wealth == reserve, queue fully backed and every claim
 succeeds, treasury fully backed, core/token level consistency; runs=100, depth=200).
-Oracle: `cd oracle && node --test test/*.mjs` — 30 tests.
+Oracle: `cd oracle && node --test test/*.mjs` — 32 tests.
 
 ## Self-review findings (fixed during the build)
 

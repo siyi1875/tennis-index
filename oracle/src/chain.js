@@ -8,9 +8,12 @@ import { ethers } from "ethers";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const RPC_URL = process.env.SPICY_RPC_URL || "https://spicy-rpc.chiliz.com";
+const KEY_FILE = path.join(__dirname, "..", ".oracle-key");
 /// Read lazily so read-only commands (compute, report, close) run without a key.
 export function loadPrivateKey() {
-  return process.env.ORACLE_PRIVATE_KEY || fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
+  if (process.env.ORACLE_PRIVATE_KEY) return process.env.ORACLE_PRIVATE_KEY;
+  if (fs.existsSync(KEY_FILE)) return fs.readFileSync(KEY_FILE, "utf8").trim();
+  return fs.readFileSync(path.join(__dirname, "..", "..", "contracts", ".deploy", "env"), "utf8").match(/DEPLOYER_PRIVATE_KEY=(\S+)/)[1];
 }
 
 export const DEPLOYMENTS_FILE = path.join(__dirname, "..", "state", "deployments.json");
